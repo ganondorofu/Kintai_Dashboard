@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface UserDashboardProps {
   user: AppUser;
@@ -82,10 +83,18 @@ export default function UserDashboard({ user }: UserDashboardProps) {
               ) : logs.length > 0 ? (
                 logs.map((log) => (
                   <TableRow key={log.id}>
-                    <TableCell>{format(log.timestamp.toDate(), 'PPP')}</TableCell>
-                    <TableCell>{format(log.timestamp.toDate(), 'p')}</TableCell>
+                    <TableCell>{log.timestamp ? format(log.timestamp.toDate(), 'PPP') : 'N/A'}</TableCell>
+                    <TableCell>{log.timestamp ? format(log.timestamp.toDate(), 'p') : 'N/A'}</TableCell>
                     <TableCell>
-                      <Badge variant={log.type === 'entry' ? 'default' : 'secondary'} className={log.type === 'entry' ? 'bg-green-500' : 'bg-red-500'}>
+                      <Badge
+                        variant={'outline'}
+                        className={cn(
+                          'border-transparent capitalize',
+                          log.type === 'entry'
+                            ? 'bg-accent text-accent-foreground'
+                            : 'bg-destructive text-destructive-foreground'
+                        )}
+                      >
                         {log.type}
                       </Badge>
                     </TableCell>
