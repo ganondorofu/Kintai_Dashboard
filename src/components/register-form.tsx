@@ -11,8 +11,10 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { completeRegistration } from '@/actions/auth';
 import { Loader2 } from 'lucide-react';
+import { collection, doc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { isMemberOfOrg } from '@/lib/github';
 
 const formSchema = z.object({
   firstname: z.string().min(1, 'First name is required'),
@@ -26,6 +28,7 @@ type RegisterFormValues = z.infer<typeof formSchema>;
 interface RegisterFormProps {
   token: string;
   user: User;
+  accessToken: string;
 }
 
 // Mock teams data. In a real app, this would come from Firestore.
@@ -35,9 +38,8 @@ const teams = [
     { id: 'pm', name: 'Project Management' },
 ];
 
-export default function RegisterForm({ token, user }: RegisterFormProps) {
+export default function RegisterForm({ token, user, accessToken }: RegisterFormProps) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const form = useForm<RegisterFormValues>({
@@ -52,22 +54,70 @@ export default function RegisterForm({ token, user }: RegisterFormProps) {
 
   const onSubmit = async (values: RegisterFormValues) => {
     setLoading(true);
-    setError(null);
+    
+    // 1. Verify GitHub Organization Membership
+    const requiredOrg = process.env.NEXT_PUBLIC_GITHUB_ORG_NAME;
+    if (!requiredOrg) {
+      toast({ title: 'Configuration Error', description: 'GitHub organization is not configured.', variant: 'destructive' });
+      setLoading(false);
+      return;
+    }
+
+    const member = await isMemberOfOrg(accessToken, requiredOrg);
+    if (!member) {
+      toast({ title: 'Access Denied', description: `You are not a member of the required GitHub organization: ${requiredOrg}.`, variant: 'destructive' });
+      setLoading(false);
+      return;
+    }
+
     try {
-      const result = await completeRegistration(values, token);
-      if (result.error) {
-        setError(result.error);
-        toast({ title: 'Registration Failed', description: result.error, variant: 'destructive' });
-      } else {
-        toast({ title: 'Registration Successful!', description: 'You can now use your card to log attendance.' });
-        // Optionally redirect or show success message.
-        // For this app, the kiosk screen will auto-update. We can show a success message here.
-        form.reset();
-        // Display a view saying registration is complete and they can close the window.
+      const batch = writeBatch(db);
+
+      // 2. Find the link request
+      const linkRequestsRef = collection(db, 'link_requests');
+      const q = query(linkRequestsRef, where('token', '==', token), where('status', '==', 'waiting'));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        toast({ title: 'Registration Failed', description: 'Invalid or expired registration link.', variant: 'destructive' });
+        setLoading(false);
+        return;
       }
-    } catch (e) {
-      setError('An unexpected error occurred.');
-       toast({ title: 'Registration Failed', description: 'An unexpected error occurred.', variant: 'destructive' });
+      const linkRequestDoc = querySnapshot.docs[0];
+      const linkRequestData = linkRequestDoc.data();
+      const cardId = linkRequestData.cardId;
+
+      // 3. Create the user document
+      const userDocRef = doc(db, 'users', user.uid);
+      batch.set(userDocRef, {
+        uid: user.uid,
+        github: user.providerData.find(p => p.providerId === 'github.com')?.email || 'N/A',
+        cardId: cardId,
+        firstname: values.firstname,
+        lastname: values.lastname,
+        teamId: values.teamId,
+        grade: values.grade,
+        role: 'user', // Default role
+        createdAt: serverTimestamp(),
+      });
+
+      // 4. Update the link request
+      batch.update(linkRequestDoc.ref, {
+        status: 'done',
+        uid: user.uid,
+        updatedAt: serverTimestamp(),
+      });
+
+      // 5. Commit the batch
+      await batch.commit();
+
+      // Clear session storage token after successful use
+      sessionStorage.removeItem('github_access_token');
+      
+      toast({ title: 'Registration Successful!', description: 'You can now use your card to log attendance.' });
+
+    } catch (e: any) {
+       toast({ title: 'Registration Failed', description: e.message || 'An unexpected error occurred.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -76,7 +126,7 @@ export default function RegisterForm({ token, user }: RegisterFormProps) {
    if (form.formState.isSubmitSuccessful) {
     return (
       <Card className="w-full max-w-md">
-        <CardHeader>
+        <CardHeader className="text-center">
           <CardTitle className="text-2xl text-primary">Registration Complete!</CardTitle>
           <CardDescription>
             You can now close this window and use your NFC tag at the kiosk.
@@ -162,8 +212,6 @@ export default function RegisterForm({ token, user }: RegisterFormProps) {
                 </FormItem>
               )}
             />
-
-            {error && <p className="text-sm font-medium text-destructive">{error}</p>}
             
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

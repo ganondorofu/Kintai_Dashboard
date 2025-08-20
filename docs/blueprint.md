@@ -2,7 +2,7 @@
 
 ## Core Features:
 
-- NFC Waiting Screen: Display "Touch NFC tag" on Raspberry Pi screen for attendance logging.
+- NFC Waiting Screen: Display 'Touch NFC tag' on Raspberry Pi screen for attendance logging.
 - Attendance Logging: Process NFC tag input as HID keyboard input, automatically saving attendance records to Firestore.
 - QR Code Display: Display a QR code linking to registration page upon entering registration mode via Raspberry Pi.
 - GitHub Authentication: Implement registration flow with GitHub OAuth and organization membership verification.

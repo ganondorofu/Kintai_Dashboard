@@ -15,7 +15,11 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
+
 const githubProvider = new GithubAuthProvider();
+// Request access to check organization membership
+githubProvider.addScope('read:org');
+
 
 const signInWithGitHub = () => {
   return signInWithPopup(auth, githubProvider);
