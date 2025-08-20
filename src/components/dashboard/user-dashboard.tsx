@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
-import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, onSnapshot, getCountFromServer } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -17,10 +17,12 @@ interface UserDashboardProps {
 export default function UserDashboard({ user }: UserDashboardProps) {
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalVisits, setTotalVisits] = useState<number | string>('--');
 
   useEffect(() => {
     if (!user) return;
 
+    // Fetch recent logs for the table
     const logsQuery = query(
       collection(db, 'attendance_logs'),
       where('uid', '==', user.uid),
@@ -28,7 +30,7 @@ export default function UserDashboard({ user }: UserDashboardProps) {
       limit(20)
     );
 
-    const unsubscribe = onSnapshot(logsQuery, (querySnapshot) => {
+    const unsubscribeLogs = onSnapshot(logsQuery, (querySnapshot) => {
       const userLogs: AttendanceLog[] = [];
       querySnapshot.forEach((doc) => {
         userLogs.push({ id: doc.id, ...doc.data() } as AttendanceLog);
@@ -37,7 +39,24 @@ export default function UserDashboard({ user }: UserDashboardProps) {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Fetch total visit count for the card
+    const fetchVisitCount = async () => {
+        try {
+            const entriesQuery = query(
+                collection(db, 'attendance_logs'),
+                where('uid', '==', user.uid),
+                where('type', '==', 'entry')
+            );
+            const snapshot = await getCountFromServer(entriesQuery);
+            setTotalVisits(snapshot.data().count);
+        } catch (error) {
+            console.error("Error fetching visit count:", error);
+            setTotalVisits('--');
+        }
+    }
+    fetchVisitCount();
+
+    return () => unsubscribeLogs();
   }, [user]);
 
   return (
@@ -49,7 +68,7 @@ export default function UserDashboard({ user }: UserDashboardProps) {
             <CardTitle>Total Visits</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">--</p>
+            <p className="text-2xl font-bold">{totalVisits}</p>
           </CardContent>
         </Card>
          <Card>

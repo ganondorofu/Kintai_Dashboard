@@ -1,5 +1,8 @@
 'use client';
 
+import { useEffect, useState } from "react";
+import { collection, getCountFromServer } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import AttendanceTrends from './attendance-trends';
@@ -34,6 +37,21 @@ function DailyAttendanceTab() {
 
 
 export default function AdminDashboard() {
+  const [totalUsers, setTotalUsers] = useState<number | string>('--');
+
+  useEffect(() => {
+    const fetchUserCount = async () => {
+      try {
+        const usersCol = collection(db, "users");
+        const snapshot = await getCountFromServer(usersCol);
+        setTotalUsers(snapshot.data().count);
+      } catch (error) {
+        console.error("Error fetching user count: ", error);
+        setTotalUsers('--');
+      }
+    };
+    fetchUserCount();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -57,7 +75,7 @@ export default function AdminDashboard() {
                             <CardTitle>Total Users</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-3xl font-bold">--</p>
+                            <p className="text-3xl font-bold">{totalUsers}</p>
                         </CardContent>
                     </Card>
                     <Card>
