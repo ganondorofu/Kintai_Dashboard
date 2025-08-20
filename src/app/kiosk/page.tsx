@@ -33,7 +33,7 @@ const KioskIcon = ({ mode }: { mode: KioskMode }) => {
 
 export default function KioskPage() {
   const [mode, setMode] = useState<KioskMode>('waiting');
-  const [message, setMessage] = useState('Touch your NFC tag');
+  const [message, setMessage] = useState('Touch NFC tag');
   const [subMessage, setSubMessage] = useState('');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [linkRequestToken, setLinkRequestToken] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export default function KioskPage() {
   
   const resetToWaiting = useCallback(() => {
     setMode('waiting');
-    setMessage('Touch your NFC tag');
+    setMessage('Touch NFC tag');
     setSubMessage('');
     setQrCodeUrl('');
     setLinkRequestToken(null);
