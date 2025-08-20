@@ -36,7 +36,7 @@ const AnalyzeAttendanceTrendsOutputSchema = z.object({
       count: z.number().describe('Number of exits at this time'),
     })
   ).describe('Peak exit times'),
-  summary: z.string().describe('A summary of attendance trends.'),
+  summary: z.string().describe('A summary of attendance trends, including tool usage predictions and resource management recommendations.'),
 });
 export type AnalyzeAttendanceTrendsOutput = z.infer<typeof AnalyzeAttendanceTrendsOutputSchema>;
 
@@ -52,6 +52,7 @@ const analyzeAttendanceTrendsPrompt = ai.definePrompt({
 
   Analyze the provided attendance logs and identify the peak entry and exit times.
   Provide a summary of the attendance trends, including the most common entry and exit times, and any patterns you observe.
+  Based on this analysis, predict potential tool usage patterns and offer recommendations for resource management to optimize club operations.
 
   Attendance Logs:
   {{#each attendanceLogs}}
@@ -59,7 +60,7 @@ const analyzeAttendanceTrendsPrompt = ai.definePrompt({
   {{/each}}
 
   Return the peak entry and exit times as arrays of time and count objects.
-  Also return a summary of the attendance trends.
+  Also return a summary of the attendance trends, tool usage predictions, and resource management recommendations.
   Make sure the response is valid JSON.
   `,
 });
