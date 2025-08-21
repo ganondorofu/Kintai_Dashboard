@@ -3,7 +3,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { GithubAuthProvider, User, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { GithubAuthProvider, User } from 'firebase/auth';
 import { useAuth } from '@/hooks/use-auth';
 import { auth, getGitHubRedirectResult, signInWithGitHub } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -44,8 +44,6 @@ function RegistrationComponent() {
   const handleLogin = async () => {
     setError(null);
     try {
-      // Set persistence before redirecting
-      await setPersistence(auth, browserLocalPersistence);
       await signInWithGitHub(auth);
     } catch (err: any) {
       console.error('[RegisterPage] Error signing in with GitHub', err);
