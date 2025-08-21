@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LayoutDashboard, Users, LogOut, Loader } from 'lucide-react';
 import { signOutUser } from '@/lib/firebase';
+import { useEffect } from 'react';
 
 export default function DashboardLayout({
   children,
@@ -16,22 +17,25 @@ export default function DashboardLayout({
   const { user, appUser, loading } = useAuth();
   const router = useRouter();
 
-  if (loading) {
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace('/');
+    }
+  }, [loading, user, router]);
+
+
+  if (loading || !user) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader className="h-10 w-10 animate-spin text-primary" />
       </div>
     );
   }
-
-  if (!user) {
-    router.replace('/');
-    return null;
-  }
   
   if (!appUser) {
     // Still loading app user data, or user is not registered in Firestore yet.
-    // Can show a specific message or a loader.
+    // This can happen briefly after registration. Redirecting to dashboard root
+    // can be a safe bet, or show a specific message.
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader className="h-10 w-10 animate-spin text-primary" />
