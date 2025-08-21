@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Github, Loader2 } from 'lucide-react';
 
@@ -14,21 +14,16 @@ export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const [isProcessingLogin, setIsProcessingLogin] = useState(false);
 
   useEffect(() => {
-    // If the user is already logged in, redirect to the dashboard.
     if (!loading && user) {
       router.push('/dashboard');
     }
   }, [user, loading, router]);
 
   const handleLogin = async () => {
-    setIsProcessingLogin(true);
     try {
       await signInWithGitHub(auth);
-      // After this, the user is redirected to GitHub.
-      // The AuthProvider will handle the redirect result on the destination page.
     } catch (error: any) {
       console.error('Error signing in with GitHub', error);
       toast({
@@ -36,12 +31,10 @@ export default function Home() {
         description: error.message || "An unexpected error occurred during sign-in.",
         variant: "destructive",
       });
-      setIsProcessingLogin(false);
     }
   };
   
-  // Show a loader while authentication is in progress or if the user is already logged in and we are redirecting.
-  if (loading || isProcessingLogin || user) {
+  if (loading || user) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -49,7 +42,6 @@ export default function Home() {
     );
   }
 
-  // If not loading and no user, show the login page.
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background p-4">
       <div className="text-center">
@@ -57,7 +49,7 @@ export default function Home() {
         <p className="mt-4 text-lg text-muted-foreground">
           NFC-based attendance system for your club.
         </p>
-        <Button onClick={handleLogin} className="mt-8" size="lg" disabled={isProcessingLogin}>
+        <Button onClick={handleLogin} className="mt-8" size="lg">
           <Github className="mr-2 h-5 w-5" />
           Login with GitHub
         </Button>
