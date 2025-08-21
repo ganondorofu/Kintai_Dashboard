@@ -107,7 +107,7 @@ function RegistrationComponent() {
       <CardHeader>
         <CardTitle>Register Your Card</CardTitle>
         <CardDescription>To continue, please log in with your GitHub account.</CardDescription>
-      </dHeader>
+      </CardHeader>
       <CardContent>
         <Button onClick={handleLogin} size="lg" className="w-full">
           <Github className="mr-2 h-5 w-5" />
