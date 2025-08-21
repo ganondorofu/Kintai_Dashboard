@@ -1,18 +1,38 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Github } from 'lucide-react';
+import { Github, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
-import { signInWithGitHub } from '@/lib/firebase';
+import { getGitHubRedirectResult, signInWithGitHub } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const checkRedirect = async () => {
+      try {
+        await getGitHubRedirectResult();
+        // The onAuthStateChanged listener in AuthProvider will handle the redirect to the dashboard.
+      } catch (error: any) {
+        console.error('Error handling redirect result', error);
+        toast({
+          title: "Login Failed",
+          description: error.message || "An unexpected error occurred during sign-in.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+    checkRedirect();
+  }, [toast]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -22,8 +42,7 @@ export default function Home() {
 
   const handleLogin = async () => {
     try {
-      await signInWithGitHub();
-      router.push('/dashboard');
+      await signInWithGitHub(); // This will redirect the user
     } catch (error: any) {
       console.error('Error signing in with GitHub', error);
       toast({
@@ -34,10 +53,10 @@ export default function Home() {
     }
   };
 
-  if (loading || user) {
+  if (loading || isAuthLoading || user) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
       </div>
     );
   }

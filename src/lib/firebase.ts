@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, signInWithPopup, GithubAuthProvider, signOut } from "firebase/auth";
+import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, getRedirectResult } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -22,7 +22,12 @@ githubProvider.addScope('read:org');
 
 
 const signInWithGitHub = () => {
-  return signInWithPopup(auth, githubProvider);
+  // Use signInWithRedirect instead of signInWithPopup
+  return signInWithRedirect(auth, githubProvider);
+};
+
+const getGitHubRedirectResult = () => {
+  return getRedirectResult(auth);
 };
 
 const signOutUser = () => {
@@ -30,4 +35,4 @@ const signOutUser = () => {
 };
 
 
-export { app, auth, db, githubProvider, signInWithGitHub, signOutUser };
+export { app, auth, db, githubProvider, signInWithGitHub, signOutUser, getGitHubRedirectResult };
