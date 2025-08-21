@@ -10,36 +10,39 @@ import { Button } from '@/components/ui/button';
 import { Github, Loader2, ShieldAlert } from 'lucide-react';
 import RegisterForm from '@/components/register-form';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
 
 function RegistrationComponent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const { user, loading } = useAuth();
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Attempt to retrieve access token from session storage on component mount
-    const storedToken = sessionStorage.getItem('github_access_token');
-    if (storedToken) {
-      setAccessToken(storedToken);
-    }
-  }, []);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const { toast } = useToast();
 
   const handleLogin = async () => {
-    setAuthError(null);
+    setIsLoggingIn(true);
     try {
       const result = await signInWithGitHub();
       const credential = GithubAuthProvider.credentialFromResult(result);
       if (credential?.accessToken) {
-        sessionStorage.setItem('github_access_token', credential.accessToken);
         setAccessToken(credential.accessToken);
       } else {
-        setAuthError('Could not retrieve GitHub access token. Please try again.');
+        toast({
+            title: "Authentication Error",
+            description: "Could not retrieve GitHub access token. Please try again.",
+            variant: "destructive",
+        });
       }
     } catch (error: any) {
       console.error('Error signing in with GitHub', error);
-      setAuthError(error.message || 'An error occurred during sign-in.');
+      toast({
+        title: "Login Failed",
+        description: error.message || 'An error occurred during sign-in.',
+        variant: "destructive",
+      });
+    } finally {
+        setIsLoggingIn(false);
     }
   };
 
@@ -75,35 +78,35 @@ function RegistrationComponent() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={handleLogin} size="lg" className="w-full">
-            <Github className="mr-2 h-5 w-5" />
+          <Button onClick={handleLogin} size="lg" className="w-full" disabled={isLoggingIn}>
+            {isLoggingIn ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Github className="mr-2 h-5 w-5" />}
             Login with GitHub
           </Button>
-          {authError && <p className="mt-4 text-sm text-destructive">{authError}</p>}
         </CardContent>
       </Card>
     );
   }
   
   if (user && !accessToken) {
-    return (
+      // This state is hit when the user is logged in, but we don't have the access token yet.
+      // This can happen on a page refresh. We need to re-auth to get the org scope token.
+       return (
         <Card className="w-full max-w-md text-center">
-        <CardHeader>
-          <ShieldAlert className="mx-auto h-12 w-12 text-destructive" />
-          <CardTitle className="text-2xl font-bold">Verification Required</CardTitle>
-          <CardDescription>
-            We need to verify your GitHub organization membership. Please re-authenticate to continue.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={handleLogin} size="lg" className="w-full">
-            <Github className="mr-2 h-5 w-5" />
-            Re-authenticate with GitHub
-          </Button>
-          {authError && <p className="mt-4 text-sm text-destructive">{authError}</p>}
-        </CardContent>
-      </Card>
-    )
+            <CardHeader>
+            <ShieldAlert className="mx-auto h-12 w-12 text-destructive" />
+            <CardTitle className="text-2xl font-bold">Verification Required</CardTitle>
+            <CardDescription>
+                We need to verify your GitHub organization membership. Please re-authenticate to grant access.
+            </CardDescription>
+            </CardHeader>
+            <CardContent>
+            <Button onClick={handleLogin} size="lg" className="w-full" disabled={isLoggingIn}>
+                {isLoggingIn ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Github className="mr-2 h-5 w-5" />}
+                Re-authenticate with GitHub
+            </Button>
+            </CardContent>
+        </Card>
+       )
   }
 
   return <RegisterForm token={token} user={user} accessToken={accessToken!} />;

@@ -7,10 +7,12 @@ import { Github } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { signInWithGitHub } from '@/lib/firebase';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!loading && user) {
@@ -22,9 +24,13 @@ export default function Home() {
     try {
       await signInWithGitHub();
       router.push('/dashboard');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing in with GitHub', error);
-      // Optionally, show a toast notification for the error
+      toast({
+        title: "Login Failed",
+        description: error.message || "An unexpected error occurred during sign-in.",
+        variant: "destructive",
+      })
     }
   };
 
