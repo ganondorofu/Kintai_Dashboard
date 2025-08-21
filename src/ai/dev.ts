@@ -1,4 +1,4 @@
 import { config } from 'dotenv';
 config();
 
-import '@/ai/flows/analyze-attendance-trends.ts';
+// This file is intentionally left blank as AI features have been removed.

@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { SidebarProvider, Sidebar, SidebarInset, SidebarHeader, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Users, BarChart, LogOut, Loader, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, Loader } from 'lucide-react';
 import { signOutUser } from '@/lib/firebase';
 
 export default function DashboardLayout({
@@ -78,12 +78,6 @@ export default function DashboardLayout({
                   <SidebarMenuButton href="/dashboard/users" tooltip="User Management">
                     <Users />
                     User Management
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton href="/dashboard/analytics" tooltip="Analytics">
-                    <BarChart />
-                    Analytics
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </>

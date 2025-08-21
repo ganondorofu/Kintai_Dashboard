@@ -5,7 +5,6 @@ import { collection, getCountFromServer } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import AttendanceTrends from './attendance-trends';
 
 function UserManagementTab() {
   return (
@@ -57,10 +56,9 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <h1 className="text-3xl font-bold font-headline">Admin Dashboard</h1>
       <Tabs defaultValue="overview">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="mt-6 space-y-6">
            <Card>
@@ -101,9 +99,6 @@ export default function AdminDashboard() {
         </TabsContent>
         <TabsContent value="users" className="mt-6">
           <UserManagementTab />
-        </TabsContent>
-        <TabsContent value="analytics" className="mt-6">
-          <AttendanceTrends />
         </TabsContent>
       </Tabs>
     </div>
