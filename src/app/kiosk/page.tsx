@@ -42,7 +42,6 @@ export default function KioskPage() {
 
 
   const inputBuffer = useRef('');
-  const inputTimeout = useRef<NodeJS.Timeout | null>(null);
   
   const resetToWaiting = useCallback(() => {
     setMode('waiting');
