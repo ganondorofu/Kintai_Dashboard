@@ -38,10 +38,8 @@ export default function KioskPage() {
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [linkRequestToken, setLinkRequestToken] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(true);
+  const [inputBuffer, setInputBuffer] = useState('');
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-
-  const inputBuffer = useRef('');
   
   const resetToWaiting = useCallback(() => {
     setMode('waiting');
@@ -49,7 +47,7 @@ export default function KioskPage() {
     setSubMessage('');
     setQrCodeUrl('');
     setLinkRequestToken(null);
-    inputBuffer.current = '';
+    setInputBuffer('');
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
   }, []);
 
@@ -57,6 +55,7 @@ export default function KioskPage() {
     setMode(mode);
     setMessage(mainMsg);
     setSubMessage(subMsg);
+    setInputBuffer('');
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(resetToWaiting, duration);
   }, [resetToWaiting]);
@@ -160,30 +159,27 @@ export default function KioskPage() {
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Allow Escape key to work anytime to reset
       if (e.key === 'Escape') {
         resetToWaiting();
         return;
       }
       
-      // Allow '/' key only in waiting mode to start registration
       if (mode === 'waiting' && e.key === '/') {
         e.preventDefault();
         setMode('register_prompt');
         setMessage('Touch the new NFC tag to register');
         setSubMessage('');
+        setInputBuffer('');
         return;
       }
 
-      // If QR is shown, don't accept other inputs
       if (mode === 'register_qr' || mode === 'loading_qr' || mode === 'success' || mode === 'error') return;
 
       if (e.key === 'Enter') {
-        processInput(inputBuffer.current);
-        inputBuffer.current = ''; // Reset buffer after processing
+        processInput(inputBuffer);
+        setInputBuffer(''); 
       } else if (e.key.length === 1 && /^[a-z0-9]+$/i.test(e.key)) {
-        // Only add alphanumeric characters to the buffer
-        inputBuffer.current += e.key;
+        setInputBuffer(prev => prev + e.key);
       }
     };
 
@@ -192,7 +188,7 @@ export default function KioskPage() {
       window.removeEventListener('keydown', handleKeyPress);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [mode, processInput, resetToWaiting]);
+  }, [mode, processInput, resetToWaiting, inputBuffer]);
   
   useEffect(() => {
     if (mode === 'register_qr' && linkRequestToken) {
@@ -211,6 +207,8 @@ export default function KioskPage() {
   }, [mode, linkRequestToken, showTemporaryState]);
 
   const renderContent = () => {
+    if (inputBuffer) return null;
+    
     if (mode === 'register_qr' && qrCodeUrl) {
       return (
         <div className="bg-white p-4 rounded-lg shadow-2xl">
@@ -220,6 +218,8 @@ export default function KioskPage() {
     }
     return <KioskIcon mode={mode} />;
   }
+  
+  const displayMessage = inputBuffer || message;
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-between p-8 text-center text-white bg-gray-900 bg-gradient-to-br from-gray-900 via-black to-gray-900 overflow-hidden">
@@ -234,8 +234,8 @@ export default function KioskPage() {
         <div className="min-h-[224px] flex items-center justify-center mb-8 transition-all duration-500">
           {renderContent()}
         </div>
-        <h1 className="text-7xl font-bold whitespace-pre-wrap transition-all duration-500">{message}</h1>
-        {subMessage && <p className="text-3xl text-gray-400 mt-4">{subMessage}</p>}
+        <h1 className="text-7xl font-bold whitespace-pre-wrap transition-all duration-500">{displayMessage}</h1>
+        {subMessage && !inputBuffer && <p className="text-3xl text-gray-400 mt-4">{subMessage}</p>}
       </div>
 
       <div className="text-xl text-gray-500 pb-4">
