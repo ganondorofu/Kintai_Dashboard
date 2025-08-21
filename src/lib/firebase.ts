@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, getRedirectResult } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, doc } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
