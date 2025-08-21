@@ -1,93 +1,57 @@
-'use client';
+''''use client';
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { User } from 'firebase/auth';
-import { GithubAuthProvider } from 'firebase/auth';
+import { GithubAuthProvider, User } from 'firebase/auth';
 import { useAuth } from '@/hooks/use-auth';
-import { setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { auth, getGitHubRedirectResult, signInWithGitHub } from '@/lib/firebase';
+import { auth, getGitHubRedirectResult, setPersistence, browserLocalPersistence, signInWithGitHub } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { Github, Loader2, ShieldAlert } from 'lucide-react';
+import { Github, Loader2 } from 'lucide-react';
 import RegisterForm from '@/components/register-form';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
 
 function RegistrationComponent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
-  const { user, loading: authProviderLoading } = useAuth();
-  const { toast } = useToast();
-
-  console.log('[RegisterPage] Rendering component. AuthProvider state:', { user, authProviderLoading });
-  
-  const [isProcessingAuth, setIsProcessingAuth] = useState(true);
+  const { user, loading } = useAuth();
+  const [error, setError] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
   useEffect(() => {
-    // This effect handles the result of a redirect from GitHub
-    // It runs only once on component mount.
-    getGitHubRedirectResult().then(result => {
+    console.log('[RegisterPage] useEffect triggered.');
+    getGitHubRedirectResult(auth)
+      .then(result => {
         console.log('[RegisterPage] getGitHubRedirectResult result:', result);
         if (result) {
-            // Successfully signed in after redirect.
-            const credential = GithubAuthProvider.credentialFromResult(result);
-            if (credential?.accessToken) {
-                setAccessToken(credential.accessToken);
-            } else {
-                 toast({
-                    title: "Authentication Error",
-                    description: "Could not retrieve GitHub access token. This is required for registration. Please try again.",
-                    variant: "destructive",
-                });
-            }
+          const credential = GithubAuthProvider.credentialFromResult(result);
+          if (credential?.accessToken) {
+            console.log('[RegisterPage] Access Token found!');
+            setAccessToken(credential.accessToken);
+          } else {
+            console.error('[RegisterPage] Credential or Access Token is missing.');
+            setError('Could not get GitHub Access Token. Please try again.');
+          }
         }
-        // If result is null, it means the page loaded without a redirect.
-        // The user might already be logged in from a previous session.
-    }).catch((error: any) => {
-        console.error('Error processing redirect:', error);
-        toast({
-            title: "Authentication Failed",
-            description: error.message || "An error occurred during sign-in.",
-            variant: "destructive",
-        });
-    }).finally(() => {
-        // After processing the redirect, we can rely on the AuthProvider's loading state.
-        setIsProcessingAuth(false);
-    });
-  }, [toast]);
+        // If result is null, we wait for onAuthStateChanged to give us the user.
+      })
+      .catch(err => {
+        console.error('[RegisterPage] Error from getGitHubRedirectResult:', err);
+        setError(err.message || 'An error occurred during sign-in.');
+      });
+  }, []);
 
   const handleLogin = async () => {
-    setIsProcessingAuth(true); // Show loader immediately on click
+    setError(null);
     try {
       await setPersistence(auth, browserLocalPersistence);
-      await signInWithGitHub(); // This will trigger a redirect
-    } catch (error: any) {
-      console.error('Error signing in with GitHub', error);
-      toast({
-        title: "Login Failed",
-        description: error.message || 'An error occurred during sign-in.',
-        variant: "destructive",
-      });
-      setIsProcessingAuth(false); // Hide loader on error
+      await signInWithGitHub();
+    } catch (err: any) {
+      console.error('[RegisterPage] Error signing in with GitHub', err);
+      setError(err.message || 'An error occurred during sign-in.');
     }
   };
 
-  if (!token) {
-    return (
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-destructive">Invalid Link</CardTitle>
-          <CardDescription>
-            This registration link is invalid. Please scan the QR code from the kiosk again.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
-  // Show a loader while checking auth state from AuthProvider or from the redirect result
-  if (authProviderLoading || isProcessingAuth) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -96,50 +60,62 @@ function RegistrationComponent() {
     );
   }
 
-  // If we're done loading and there's no user, show the login prompt.
-  if (!user) {
+  if (error) {
     return (
-      <Card className="w-full max-w-md text-center">
-        <CardHeader>
-          <CardTitle className="text-3xl font-bold text-primary font-headline">Register Your Card</CardTitle>
-          <CardDescription className="text-lg">
-            To continue, please log in with your GitHub account.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={handleLogin} size="lg" className="w-full">
-            <Github className="mr-2 h-5 w-5" />
-            Login with GitHub
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-  
-  // If user is logged in, but we don't have the access token (e.g. on a page refresh after login),
-  // we need to re-authenticate to get it. The token is required for org checks.
-  if (user && !accessToken) {
-       return (
         <Card className="w-full max-w-md text-center">
             <CardHeader>
-              <ShieldAlert className="mx-auto h-12 w-12 text-destructive" />
-              <CardTitle className="text-2xl font-bold">Verification Required</CardTitle>
-              <CardDescription>
-                  We need to verify your GitHub organization membership. Please re-authenticate to grant the necessary permissions.
-              </CardDescription>
+              <CardTitle className="text-destructive">Authentication Error</CardTitle>
+              <CardDescription>{error}</CardDescription>
             </CardHeader>
             <CardContent>
-            <Button onClick={handleLogin} size="lg" className="w-full">
-                <Github className="mr-2 h-5 w-5" />
-                Re-authenticate with GitHub
-            </Button>
+                <Button onClick={handleLogin} size="lg" className="w-full">
+                    <Github className="mr-2 h-5 w-5" />
+                    Try Again
+                </Button>
             </CardContent>
         </Card>
-       )
+    )
   }
 
-  // If we have the user and the access token, render the registration form.
-  return <RegisterForm token={token} user={user} accessToken={accessToken!} />;
+  // If we have a user from AuthProvider and an access token from the redirect
+  if (user && accessToken) {
+    return <RegisterForm token={token!} user={user} accessToken={accessToken} />;
+  }
+
+  // If we have a user but no access token (e.g. page refresh after registration)
+  // We need to re-auth to get it for org checks.
+  if (user && !accessToken) {
+    return (
+        <Card className="w-full max-w-md text-center">
+            <CardHeader>
+              <CardTitle>Verification Required</CardTitle>
+              <CardDescription>Please re-authenticate to verify your organization membership.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Button onClick={handleLogin} size="lg" className="w-full">
+                    <Github className="mr-2 h-5 w-5" />
+                    Re-authenticate with GitHub
+                </Button>
+            </CardContent>
+        </Card>
+    )
+  }
+
+  // If we are done loading and there is no user, show the login button.
+  return (
+    <Card className="w-full max-w-md text-center">
+      <CardHeader>
+        <CardTitle>Register Your Card</CardTitle>
+        <CardDescription>To continue, please log in with your GitHub account.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button onClick={handleLogin} size="lg" className="w-full">
+          <Github className="mr-2 h-5 w-5" />
+          Login with GitHub
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function RegisterPage() {
@@ -154,3 +130,4 @@ export default function RegisterPage() {
         </Suspense>
     )
 }
+''''
