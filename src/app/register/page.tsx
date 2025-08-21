@@ -14,55 +14,57 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 function RegistrationComponent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
-  const { user, loading: authLoading } = useAuth();
-  const [error, setError] = useState<string | null>(null);
+  const { user: authUser, loading: authLoading } = useAuth();
+
+  const [localUser, setLocalUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [isProcessingAuth, setIsProcessingAuth] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(true);
 
   useEffect(() => {
-    console.log('[RegisterPage] useEffect triggered. Auth loading:', authLoading);
-    if (!authLoading) {
-      console.log('[RegisterPage] Auth is not loading, processing redirect. App name:', auth.app.name);
-      getGitHubRedirectResult(auth)
-        .then(result => {
-          console.log('[RegisterPage] getGitHubRedirectResult result:', result);
-          if (result) {
-            const credential = GithubAuthProvider.credentialFromResult(result);
-            if (credential?.accessToken) {
-              console.log('[RegisterPage] Access Token found!');
-              setAccessToken(credential.accessToken);
-            } else {
-              console.error('[RegisterPage] Credential or Access Token is missing.');
-              setError('Could not get GitHub Access Token. Please try again.');
-            }
+    const processAuth = async () => {
+      try {
+        const result = await getGitHubRedirectResult(auth);
+        console.log('[RegisterPage] getGitHubRedirectResult result:', result);
+        if (result) {
+          const credential = GithubAuthProvider.credentialFromResult(result);
+          setLocalUser(result.user);
+          if (credential?.accessToken) {
+            setAccessToken(credential.accessToken);
+          } else {
+            setError('Could not get GitHub Access Token. Please try again.');
           }
-          // If result is null, it means the user either just landed on the page
-          // or they are already logged in from a previous session.
-          // The useAuth() hook will handle providing the user object in that case.
-        })
-        .catch(err => {
-          console.error('[RegisterPage] Error from getGitHubRedirectResult:', err);
-          setError(err.message || 'An error occurred during sign-in.');
-        })
-        .finally(() => {
-          setIsProcessingAuth(false);
-        });
+        }
+      } catch (err: any) {
+        console.error('[RegisterPage] Error from getGitHubRedirectResult:', err);
+        setError(err.message || 'An error occurred during sign-in.');
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    
+    // Only process redirect result if auth is not loading from provider
+    if(!authLoading) {
+      processAuth();
     }
   }, [authLoading]);
 
   const handleLogin = async () => {
     setError(null);
-    setIsProcessingAuth(true);
+    setIsProcessing(true);
     try {
       await signInWithGitHub(auth);
     } catch (err: any) {
       console.error('[RegisterPage] Error signing in with GitHub', err);
       setError(err.message || 'An error occurred during sign-in.');
-      setIsProcessingAuth(false);
+      setIsProcessing(false);
     }
   };
+  
+  // The user from useAuth() is the source of truth once established.
+  const user = localUser || authUser;
 
-  if (authLoading || isProcessingAuth) {
+  if (authLoading || isProcessing) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -116,8 +118,8 @@ function RegistrationComponent() {
         <CardDescription>To continue, please log in with your GitHub account.</CardDescription>
       </CardHeader>
       <CardContent>
-        <Button onClick={handleLogin} size="lg" className="w-full" disabled={isProcessingAuth}>
-          {isProcessingAuth ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Github className="mr-2 h-5 w-5" />}
+        <Button onClick={handleLogin} size="lg" className="w-full" disabled={isProcessing}>
+          {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Github className="mr-2 h-5 w-5" />}
           Login with GitHub
         </Button>
       </CardContent>
