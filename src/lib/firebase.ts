@@ -24,7 +24,6 @@ githubProvider.addScope('read:org');
 
 
 const signInWithGitHub = (authInstance: Auth) => {
-  // The signInWithRedirect function initiates the GitHub login flow.
   return signInWithRedirect(authInstance, githubProvider);
 };
 
@@ -32,5 +31,4 @@ const signOutUser = () => {
   return signOut(auth);
 };
 
-// Exporting getRedirectResult allows pages to handle the result of the redirect flow.
 export { app, auth, db, signInWithGitHub, signOutUser, GithubAuthProvider, getRedirectResult };
