@@ -18,6 +18,8 @@ function RegistrationComponent() {
   const token = searchParams.get('token');
   const { user, loading: authProviderLoading } = useAuth();
   const { toast } = useToast();
+
+  console.log('[RegisterPage] Rendering component. AuthProvider state:', { user, authProviderLoading });
   
   const [isProcessingAuth, setIsProcessingAuth] = useState(true);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -26,6 +28,7 @@ function RegistrationComponent() {
     // This effect handles the result of a redirect from GitHub
     // It runs only once on component mount.
     getGitHubRedirectResult().then(result => {
+        console.log('[RegisterPage] getGitHubRedirectResult result:', result);
         if (result) {
             // Successfully signed in after redirect.
             const credential = GithubAuthProvider.credentialFromResult(result);
