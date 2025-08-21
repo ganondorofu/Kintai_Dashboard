@@ -3,7 +3,7 @@
 
 import { createContext, useEffect, useState, ReactNode } from "react";
 import type { User } from "firebase/auth";
-import { onAuthStateChanged, getRedirectResult, GithubAuthProvider } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import type { AppUser } from "@/types";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -12,7 +12,7 @@ interface AuthContextType {
   user: User | null;
   appUser: AppUser | null;
   loading: boolean;
-  accessToken: string | null;
+  accessToken: string | null; // This will now be handled within the page context where it's needed
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -26,64 +26,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  
+  // The accessToken is now handled locally in the /register page
+  // as it's only needed there during the registration process.
+  const accessToken = null;
 
   useEffect(() => {
-    // This effect should run only once on mount to handle auth state.
-    const processAuth = async () => {
-      try {
-        // Check for redirect result first
-        const result = await getRedirectResult(auth);
-        if (result) {
-          console.log('[AuthProvider] Caught redirect result.');
-          const credential = GithubAuthProvider.credentialFromResult(result);
-          if (credential?.accessToken) {
-            setAccessToken(credential.accessToken);
-          }
-          // The user object will be set by onAuthStateChanged shortly
-        }
-      } catch (error) {
-        console.error('[AuthProvider] Error getting redirect result:', error);
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      // If a user is not authenticated, we can immediately stop loading.
+      if (!firebaseUser) {
+        setAppUser(null);
+        setLoading(false);
       }
+      // If a user is authenticated, we will continue loading until we fetch their app-specific data.
+    });
 
-      // After processing potential redirect, set up the state listener.
-      const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-        console.log('[AuthProvider] onAuthStateChanged fired. User:', firebaseUser?.uid || null);
-        setUser(firebaseUser);
-        if (!firebaseUser) {
-          // If no user, we are done loading.
-          setAppUser(null);
-          setLoading(false);
-        }
-      });
-      
-      // Do not return unsubscribeAuth immediately, it's handled in the cleanup
-      return unsubscribeAuth;
-    };
-
-    const unsubscribePromise = processAuth();
-
-    return () => {
-      unsubscribePromise.then(unsubscribe => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
-      });
-    };
+    return () => unsubscribeAuth();
   }, []);
 
   useEffect(() => {
-    // This effect reacts to user changes to fetch Firestore data.
+    // This effect reacts to changes in the authenticated user.
     if (user) {
       const userDocRef = doc(db, "users", user.uid);
       const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
         if (doc.exists()) {
           setAppUser({ uid: doc.id, ...doc.data() } as AppUser);
         } else {
-          // User is authenticated, but not yet in our DB.
+          // User is authenticated with Firebase, but doesn't have a profile in our DB yet.
+          // This is expected during the registration flow.
           setAppUser(null);
         }
-        setLoading(false); // Done loading once we have user and checked for appUser.
+        // We are done loading once we have checked for the user's Firestore document.
+        setLoading(false);
       }, (error) => {
         console.error("[AuthProvider] Error fetching user data:", error);
         setAppUser(null);

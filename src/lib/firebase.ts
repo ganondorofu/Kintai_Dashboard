@@ -1,6 +1,6 @@
 
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, Auth } from "firebase/auth";
+import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, Auth, getRedirectResult } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -18,11 +18,13 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 const githubProvider = new GithubAuthProvider();
-// Request access to check organization membership
+// Request access to check organization membership.
+// This scope is crucial for the registration flow.
 githubProvider.addScope('read:org');
 
 
 const signInWithGitHub = (authInstance: Auth) => {
+  // The signInWithRedirect function initiates the GitHub login flow.
   return signInWithRedirect(authInstance, githubProvider);
 };
 
@@ -30,4 +32,5 @@ const signOutUser = () => {
   return signOut(auth);
 };
 
-export { app, auth, db, signInWithGitHub, signOutUser, GithubAuthProvider };
+// Exporting getRedirectResult allows pages to handle the result of the redirect flow.
+export { app, auth, db, signInWithGitHub, signOutUser, GithubAuthProvider, getRedirectResult };
