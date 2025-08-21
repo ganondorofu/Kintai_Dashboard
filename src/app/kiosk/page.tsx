@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -207,8 +208,6 @@ export default function KioskPage() {
   }, [mode, linkRequestToken, showTemporaryState]);
 
   const renderContent = () => {
-    if (inputBuffer) return null;
-    
     if (mode === 'register_qr' && qrCodeUrl) {
       return (
         <div className="bg-white p-4 rounded-lg shadow-2xl">
@@ -219,8 +218,6 @@ export default function KioskPage() {
     return <KioskIcon mode={mode} />;
   }
   
-  const displayMessage = inputBuffer || message;
-
   return (
     <div className="flex h-full w-full flex-col items-center justify-between p-8 text-center text-white bg-gray-900 bg-gradient-to-br from-gray-900 via-black to-gray-900 overflow-hidden">
        <div className="absolute top-4 right-4 flex items-center gap-2 text-lg font-medium text-gray-300">
@@ -234,8 +231,9 @@ export default function KioskPage() {
         <div className="min-h-[224px] flex items-center justify-center mb-8 transition-all duration-500">
           {renderContent()}
         </div>
-        <h1 className="text-7xl font-bold whitespace-pre-wrap transition-all duration-500">{displayMessage}</h1>
-        {subMessage && !inputBuffer && <p className="text-3xl text-gray-400 mt-4">{subMessage}</p>}
+        <h1 className="text-7xl font-bold whitespace-pre-wrap transition-all duration-500">{message}</h1>
+        {subMessage && <p className="text-3xl text-gray-400 mt-4">{subMessage}</p>}
+        {inputBuffer && <p className="text-2xl text-gray-500 mt-2 font-mono h-8">{inputBuffer}</p>}
       </div>
 
       <div className="text-xl text-gray-500 pb-4">
