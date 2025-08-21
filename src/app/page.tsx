@@ -17,7 +17,6 @@ export default function Home() {
   const [isProcessingLogin, setIsProcessingLogin] = useState(false);
 
   useEffect(() => {
-    // If the user is logged in, redirect them to the dashboard.
     if (!loading && user) {
       router.push('/dashboard');
     }
@@ -26,8 +25,6 @@ export default function Home() {
   const handleLogin = async () => {
     setIsProcessingLogin(true);
     try {
-      // We don't need to handle the result here, 
-      // the AuthProvider and destination pages will handle it.
       await signInWithGitHub(auth);
     } catch (error: any) {
       console.error('Error signing in with GitHub', error);
@@ -40,7 +37,6 @@ export default function Home() {
     }
   };
   
-  // Show a loader while checking for user auth state or if a login is processing.
   if (loading || isProcessingLogin || user) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
@@ -49,7 +45,6 @@ export default function Home() {
     );
   }
 
-  // Only show the login page if we are sure the user is not logged in.
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background p-4">
       <div className="text-center">

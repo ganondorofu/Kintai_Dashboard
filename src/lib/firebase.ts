@@ -34,4 +34,4 @@ const signOutUser = () => {
   return signOut(auth);
 };
 
-export { app, auth, db, signInWithGitHub, signOutUser, getGitHubRedirectResult, githubProvider };
+export { app, auth, db, signInWithGitHub, signOutUser, getGitHubRedirectResult, GithubAuthProvider };
