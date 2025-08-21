@@ -4,7 +4,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Github, Loader2 } from 'lucide-react';
-import { setPersistence, browserLocalPersistence } from 'firebase/auth';
 
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
@@ -45,8 +44,6 @@ export default function Home() {
   const handleLogin = async () => {
     setIsProcessingAuth(true); // Show loader immediately on click
     try {
-      // Set persistence before initiating the redirect
-      await setPersistence(auth, browserLocalPersistence);
       // This will redirect the user to GitHub's login page
       await signInWithGitHub(auth);
     } catch (error: any) {
