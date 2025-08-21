@@ -232,8 +232,7 @@ export default function KioskPage() {
           {renderContent()}
         </div>
         <h1 className="text-7xl font-bold whitespace-pre-wrap transition-all duration-500">{message}</h1>
-        {subMessage && <p className="text-3xl text-gray-400 mt-4">{subMessage}</p>}
-        {inputBuffer && <p className="text-2xl text-gray-500 mt-2 font-mono h-8">{inputBuffer}</p>}
+        <p className="text-3xl text-gray-400 mt-4 h-10">{subMessage || inputBuffer || ' '}</p>
       </div>
 
       <div className="text-xl text-gray-500 pb-4">
