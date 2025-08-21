@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, getRedirectResult, onAuthStateChanged as onFirebaseAuthStateChanged } from "firebase/auth";
+import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, getRedirectResult } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -33,7 +33,4 @@ const signOutUser = () => {
   return signOut(auth);
 };
 
-const onAuthStateChanged = onFirebaseAuthStateChanged;
-
-
-export { app, auth, db, githubProvider, signInWithGitHub, signOutUser, getGitHubRedirectResult, onAuthStateChanged };
+export { app, auth, db, signInWithGitHub, signOutUser, getGitHubRedirectResult };

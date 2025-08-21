@@ -15,30 +15,31 @@ import { useToast } from '@/hooks/use-toast';
 function RegistrationComponent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
-  const { user, loading } = useAuth();
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isCheckingRedirect, setIsCheckingRedirect] = useState(true);
+  const { user, loading: authProviderLoading } = useAuth();
   const { toast } = useToast();
   
+  const [isProcessingAuth, setIsProcessingAuth] = useState(true);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+
   useEffect(() => {
     // This effect handles the result of a redirect from GitHub
+    // It runs only once on component mount.
     getGitHubRedirectResult().then(result => {
         if (result) {
-            // Successfully signed in.
+            // Successfully signed in after redirect.
             const credential = GithubAuthProvider.credentialFromResult(result);
             if (credential?.accessToken) {
                 setAccessToken(credential.accessToken);
             } else {
                  toast({
                     title: "Authentication Error",
-                    description: "Could not retrieve GitHub access token after redirect. Please try again.",
+                    description: "Could not retrieve GitHub access token. This is required for registration. Please try again.",
                     variant: "destructive",
                 });
             }
         }
-        // If result is null, it means the page loaded without a redirect,
-        // which is fine. The user might already be logged in.
+        // If result is null, it means the page loaded without a redirect.
+        // The user might already be logged in from a previous session.
     }).catch((error: any) => {
         console.error('Error processing redirect:', error);
         toast({
@@ -47,16 +48,13 @@ function RegistrationComponent() {
             variant: "destructive",
         });
     }).finally(() => {
-        // The onAuthStateChanged listener in AuthProvider will handle setting the user.
-        // We just need to stop our loading indicators.
-        setIsCheckingRedirect(false);
-        setIsLoggingIn(false);
+        // After processing the redirect, we can rely on the AuthProvider's loading state.
+        setIsProcessingAuth(false);
     });
   }, [toast]);
 
-
   const handleLogin = async () => {
-    setIsLoggingIn(true);
+    setIsProcessingAuth(true); // Show loader immediately on click
     try {
       await signInWithGitHub(); // This will trigger a redirect
     } catch (error: any) {
@@ -66,7 +64,7 @@ function RegistrationComponent() {
         description: error.message || 'An error occurred during sign-in.',
         variant: "destructive",
       });
-      setIsLoggingIn(false);
+      setIsProcessingAuth(false); // Hide loader on error
     }
   };
 
@@ -84,7 +82,7 @@ function RegistrationComponent() {
   }
 
   // Show a loader while checking auth state from AuthProvider or from the redirect result
-  if (loading || isCheckingRedirect) {
+  if (authProviderLoading || isProcessingAuth) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -104,8 +102,8 @@ function RegistrationComponent() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={handleLogin} size="lg" className="w-full" disabled={isLoggingIn}>
-            {isLoggingIn ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Github className="mr-2 h-5 w-5" />}
+          <Button onClick={handleLogin} size="lg" className="w-full">
+            <Github className="mr-2 h-5 w-5" />
             Login with GitHub
           </Button>
         </CardContent>
@@ -113,21 +111,21 @@ function RegistrationComponent() {
     );
   }
   
-  // If user is logged in, but we don't have the access token (e.g. on a page refresh),
+  // If user is logged in, but we don't have the access token (e.g. on a page refresh after login),
   // we need to re-authenticate to get it. The token is required for org checks.
   if (user && !accessToken) {
        return (
         <Card className="w-full max-w-md text-center">
             <CardHeader>
-            <ShieldAlert className="mx-auto h-12 w-12 text-destructive" />
-            <CardTitle className="text-2xl font-bold">Verification Required</CardTitle>
-            <CardDescription>
-                We need to verify your GitHub organization membership. Please re-authenticate to grant access.
-            </CardDescription>
+              <ShieldAlert className="mx-auto h-12 w-12 text-destructive" />
+              <CardTitle className="text-2xl font-bold">Verification Required</CardTitle>
+              <CardDescription>
+                  We need to verify your GitHub organization membership. Please re-authenticate to grant the necessary permissions.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-            <Button onClick={handleLogin} size="lg" className="w-full" disabled={isLoggingIn}>
-                {isLoggingIn ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Github className="mr-2 h-5 w-5" />}
+            <Button onClick={handleLogin} size="lg" className="w-full">
+                <Github className="mr-2 h-5 w-5" />
                 Re-authenticate with GitHub
             </Button>
             </CardContent>
