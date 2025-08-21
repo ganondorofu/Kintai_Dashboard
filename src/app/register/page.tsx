@@ -1,4 +1,4 @@
-''''use client';
+'use client';
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -107,7 +107,7 @@ function RegistrationComponent() {
       <CardHeader>
         <CardTitle>Register Your Card</CardTitle>
         <CardDescription>To continue, please log in with your GitHub account.</CardDescription>
-      </CardHeader>
+      </dHeader>
       <CardContent>
         <Button onClick={handleLogin} size="lg" className="w-full">
           <Github className="mr-2 h-5 w-5" />
@@ -130,4 +130,3 @@ export default function RegisterPage() {
         </Suspense>
     )
 }
-''''
