@@ -125,7 +125,7 @@ export default function KioskPage() {
             updatedAt: serverTimestamp(),
         });
         
-        const registrationUrl = `${window.location.origin}/register?token=${token}`;
+        const registrationUrl = `https://9000-firebase-studio-1755703956488.cluster-wurh6gchdjcjmwrw2tqtufvhss.cloudworkstations.dev/register?token=${token}`;
         setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(registrationUrl)}`);
         setLinkRequestToken(token);
         setMode('register_qr');
