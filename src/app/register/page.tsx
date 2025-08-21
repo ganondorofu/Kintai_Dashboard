@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import type { User } from 'firebase/auth';
 import { GithubAuthProvider } from 'firebase/auth';
 import { useAuth } from '@/hooks/use-auth';
-import { signInWithGitHub } from '@/lib/firebase';
+import { getGitHubRedirectResult, signInWithGitHub } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Github, Loader2, ShieldAlert } from 'lucide-react';
 import RegisterForm from '@/components/register-form';
@@ -18,22 +18,45 @@ function RegistrationComponent() {
   const { user, loading } = useAuth();
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isCheckingRedirect, setIsCheckingRedirect] = useState(true);
   const { toast } = useToast();
+  
+  useEffect(() => {
+    const handleRedirect = async () => {
+      try {
+        const result = await getGitHubRedirectResult();
+        if (result) {
+            const credential = GithubAuthProvider.credentialFromResult(result);
+            if (credential?.accessToken) {
+                setAccessToken(credential.accessToken);
+            } else {
+                 toast({
+                    title: "Authentication Error",
+                    description: "Could not retrieve GitHub access token after redirect. Please try again.",
+                    variant: "destructive",
+                });
+            }
+        }
+      } catch (error: any) {
+        console.error('Error processing redirect:', error);
+        toast({
+            title: "Authentication Failed",
+            description: error.message || "An error occurred during sign-in.",
+            variant: "destructive",
+        });
+      } finally {
+        setIsCheckingRedirect(false);
+        setIsLoggingIn(false);
+      }
+    };
+    handleRedirect();
+  }, [toast]);
+
 
   const handleLogin = async () => {
     setIsLoggingIn(true);
     try {
-      const result = await signInWithGitHub();
-      const credential = GithubAuthProvider.credentialFromResult(result);
-      if (credential?.accessToken) {
-        setAccessToken(credential.accessToken);
-      } else {
-        toast({
-            title: "Authentication Error",
-            description: "Could not retrieve GitHub access token. Please try again.",
-            variant: "destructive",
-        });
-      }
+      await signInWithGitHub(); // This will trigger a redirect
     } catch (error: any) {
       console.error('Error signing in with GitHub', error);
       toast({
@@ -41,8 +64,7 @@ function RegistrationComponent() {
         description: error.message || 'An error occurred during sign-in.',
         variant: "destructive",
       });
-    } finally {
-        setIsLoggingIn(false);
+      setIsLoggingIn(false);
     }
   };
 
@@ -59,7 +81,7 @@ function RegistrationComponent() {
     );
   }
 
-  if (loading) {
+  if (loading || isCheckingRedirect) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -88,8 +110,9 @@ function RegistrationComponent() {
   }
   
   if (user && !accessToken) {
-      // This state is hit when the user is logged in, but we don't have the access token yet.
-      // This can happen on a page refresh. We need to re-auth to get the org scope token.
+      // This state is hit when user is logged in, but we might not have the access token with the right scope
+      // (e.g., on a page refresh, or if they logged in previously without the 'read:org' scope).
+      // Re-authenticating ensures we get the necessary token.
        return (
         <Card className="w-full max-w-md text-center">
             <CardHeader>
