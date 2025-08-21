@@ -1,6 +1,6 @@
 
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, getRedirectResult, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, getRedirectResult, Auth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -17,24 +17,21 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Set persistence level
-setPersistence(auth, browserLocalPersistence);
-
 const githubProvider = new GithubAuthProvider();
 // Request access to check organization membership
 githubProvider.addScope('read:org');
 
 
-const signInWithGitHub = () => {
-  return signInWithRedirect(auth, githubProvider);
+const signInWithGitHub = (authInstance: Auth) => {
+  return signInWithRedirect(authInstance, githubProvider);
 };
 
-const getGitHubRedirectResult = () => {
-  return getRedirectResult(auth);
+const getGitHubRedirectResult = (authInstance: Auth) => {
+  return getRedirectResult(authInstance);
 };
 
 const signOutUser = () => {
   return signOut(auth);
 };
 
-export { app, auth, db, signInWithGitHub, signOutUser, getGitHubRedirectResult };
+export { app, auth, db, signInWithGitHub, signOutUser, getGitHubRedirectResult, githubProvider };
