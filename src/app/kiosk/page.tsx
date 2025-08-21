@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { addDoc, collection, serverTimestamp, query, where, orderBy, limit, getDocs, onSnapshot, doc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, query, where, orderBy, limit, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { LinkRequest } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -138,8 +138,8 @@ export default function KioskPage() {
         setSubMessage('Press ESC to cancel');
 
     } catch (err) {
-        console.error(err);
-        showTemporaryState('error', 'Registration Error', 'Could not generate link. Please try again.');
+        console.error("Error during registration link generation:", err);
+        showTemporaryState('error', 'Registration Error', 'Could not generate link. Please check the connection and try again.');
     }
   }, [showTemporaryState]);
 
@@ -189,7 +189,7 @@ export default function KioskPage() {
       window.removeEventListener('keydown', handleKeyPress);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [mode, processInput, resetToWaiting, inputBuffer]);
+  }, [inputBuffer, mode, processInput, resetToWaiting]);
   
   useEffect(() => {
     if (mode === 'register_qr' && linkRequestToken) {
