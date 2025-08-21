@@ -5,7 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import type { User } from 'firebase/auth';
 import { GithubAuthProvider } from 'firebase/auth';
 import { useAuth } from '@/hooks/use-auth';
-import { getGitHubRedirectResult, signInWithGitHub } from '@/lib/firebase';
+import { setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { auth, getGitHubRedirectResult, signInWithGitHub } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Github, Loader2, ShieldAlert } from 'lucide-react';
 import RegisterForm from '@/components/register-form';
@@ -56,6 +57,7 @@ function RegistrationComponent() {
   const handleLogin = async () => {
     setIsProcessingAuth(true); // Show loader immediately on click
     try {
+      await setPersistence(auth, browserLocalPersistence);
       await signInWithGitHub(); // This will trigger a redirect
     } catch (error: any) {
       console.error('Error signing in with GitHub', error);
