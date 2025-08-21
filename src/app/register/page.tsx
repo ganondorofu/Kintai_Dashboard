@@ -22,10 +22,10 @@ function RegistrationComponent() {
   const { toast } = useToast();
   
   useEffect(() => {
-    const handleRedirect = async () => {
-      try {
-        const result = await getGitHubRedirectResult();
+    // This effect handles the result of a redirect from GitHub
+    getGitHubRedirectResult().then(result => {
         if (result) {
+            // Successfully signed in.
             const credential = GithubAuthProvider.credentialFromResult(result);
             if (credential?.accessToken) {
                 setAccessToken(credential.accessToken);
@@ -37,19 +37,21 @@ function RegistrationComponent() {
                 });
             }
         }
-      } catch (error: any) {
+        // If result is null, it means the page loaded without a redirect,
+        // which is fine. The user might already be logged in.
+    }).catch((error: any) => {
         console.error('Error processing redirect:', error);
         toast({
             title: "Authentication Failed",
             description: error.message || "An error occurred during sign-in.",
             variant: "destructive",
         });
-      } finally {
+    }).finally(() => {
+        // The onAuthStateChanged listener in AuthProvider will handle setting the user.
+        // We just need to stop our loading indicators.
         setIsCheckingRedirect(false);
         setIsLoggingIn(false);
-      }
-    };
-    handleRedirect();
+    });
   }, [toast]);
 
 
@@ -81,6 +83,7 @@ function RegistrationComponent() {
     );
   }
 
+  // Show a loader while checking auth state from AuthProvider or from the redirect result
   if (loading || isCheckingRedirect) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
@@ -90,6 +93,7 @@ function RegistrationComponent() {
     );
   }
 
+  // If we're done loading and there's no user, show the login prompt.
   if (!user) {
     return (
       <Card className="w-full max-w-md text-center">
@@ -109,10 +113,9 @@ function RegistrationComponent() {
     );
   }
   
+  // If user is logged in, but we don't have the access token (e.g. on a page refresh),
+  // we need to re-authenticate to get it. The token is required for org checks.
   if (user && !accessToken) {
-      // This state is hit when user is logged in, but we might not have the access token with the right scope
-      // (e.g., on a page refresh, or if they logged in previously without the 'read:org' scope).
-      // Re-authenticating ensures we get the necessary token.
        return (
         <Card className="w-full max-w-md text-center">
             <CardHeader>
@@ -132,6 +135,7 @@ function RegistrationComponent() {
        )
   }
 
+  // If we have the user and the access token, render the registration form.
   return <RegisterForm token={token} user={user} accessToken={accessToken!} />;
 }
 

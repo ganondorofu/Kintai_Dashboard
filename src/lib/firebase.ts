@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, getRedirectResult } from "firebase/auth";
-import { getFirestore, doc } from "firebase/firestore";
+import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, getRedirectResult, onAuthStateChanged as onFirebaseAuthStateChanged } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -12,7 +12,7 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -22,7 +22,6 @@ githubProvider.addScope('read:org');
 
 
 const signInWithGitHub = () => {
-  // Use signInWithRedirect instead of signInWithPopup
   return signInWithRedirect(auth, githubProvider);
 };
 
@@ -34,5 +33,7 @@ const signOutUser = () => {
   return signOut(auth);
 };
 
+const onAuthStateChanged = onFirebaseAuthStateChanged;
 
-export { app, auth, db, githubProvider, signInWithGitHub, signOutUser, getGitHubRedirectResult };
+
+export { app, auth, db, githubProvider, signInWithGitHub, signOutUser, getGitHubRedirectResult, onAuthStateChanged };

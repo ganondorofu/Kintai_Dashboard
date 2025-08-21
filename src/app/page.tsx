@@ -16,25 +16,23 @@ export default function Home() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   useEffect(() => {
-    const checkRedirect = async () => {
-      try {
-        await getGitHubRedirectResult();
-        // The onAuthStateChanged listener in AuthProvider will handle the redirect to the dashboard.
-      } catch (error: any) {
-        console.error('Error handling redirect result', error);
-        toast({
-          title: "Login Failed",
-          description: error.message || "An unexpected error occurred during sign-in.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsAuthLoading(false);
-      }
-    };
-    checkRedirect();
+    // This effect handles the result of a redirect from GitHub
+    getGitHubRedirectResult().catch((error: any) => {
+      console.error('Error handling redirect result', error);
+      toast({
+        title: "Login Failed",
+        description: error.message || "An unexpected error occurred during sign-in.",
+        variant: "destructive",
+      });
+    }).finally(() => {
+      // The onAuthStateChanged listener in AuthProvider will handle setting the user.
+      // We just need to stop our loading indicator.
+      setIsAuthLoading(false);
+    });
   }, [toast]);
 
   useEffect(() => {
+    // This effect redirects the user to the dashboard if they are logged in.
     if (!loading && user) {
       router.push('/dashboard');
     }
@@ -42,7 +40,8 @@ export default function Home() {
 
   const handleLogin = async () => {
     try {
-      await signInWithGitHub(); // This will redirect the user
+      // This will redirect the user to GitHub's login page
+      await signInWithGitHub();
     } catch (error: any) {
       console.error('Error signing in with GitHub', error);
       toast({
@@ -52,7 +51,8 @@ export default function Home() {
       })
     }
   };
-
+  
+  // Show a loader while checking auth state or if user is already logged in (and redirecting)
   if (loading || isAuthLoading || user) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
