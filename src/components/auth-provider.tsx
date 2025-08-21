@@ -27,10 +27,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      console.log('[AuthProvider] onAuthStateChanged fired. User:', firebaseUser?.uid || null);
       setUser(firebaseUser);
       if (!firebaseUser) {
-        // If no user, not loading anymore
         setAppUser(null);
         setLoading(false);
       }
@@ -46,11 +44,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (doc.exists()) {
           setAppUser({ uid: doc.id, ...doc.data() } as AppUser);
         } else {
-          // User exists in auth, but not in firestore yet (e.g. during registration)
-          // We can consider them "not fully logged in" yet from app perspective
           setAppUser(null);
         }
-        setLoading(false); // Stop loading once we have user data or know it doesn't exist
+        setLoading(false);
       }, (error) => {
         console.error("Error fetching user data:", error);
         setAppUser(null);
