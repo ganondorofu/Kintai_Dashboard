@@ -33,6 +33,12 @@ export async function isMemberOfOrg(accessToken: string, orgs: string[]): Promis
     
     // Check if the user is a member of ANY of the provided orgs
     const userOrgLogins = userOrgs.map((o: { login: string }) => o.login.toLowerCase());
+    
+    // --- DEBUG LOG ---
+    console.log("Required Orgs:", validOrgs.map(o => o.toLowerCase()));
+    console.log("User's Orgs:", userOrgLogins);
+    // --- END DEBUG LOG ---
+
     return validOrgs.some(requiredOrg => userOrgLogins.includes(requiredOrg.toLowerCase()));
 
   } catch (error) {
