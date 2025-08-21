@@ -14,10 +14,11 @@ function RegistrationComponent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const { user, loading, accessToken } = useAuth();
-
+  
   const handleLogin = async () => {
     try {
       await signInWithGitHub(auth);
+      // The user will be redirected. The result is handled by AuthProvider.
     } catch (err: any) {
       console.error('[RegisterPage] Error signing in with GitHub', err);
     }
@@ -32,12 +33,15 @@ function RegistrationComponent() {
     );
   }
 
+  // If we have a user and an access token, show the registration form
   if (user && accessToken) {
     return <RegisterForm token={token!} user={user} accessToken={accessToken} />;
   }
-
+  
+  // If we have a user but no access token (e.g. from a previous session, but redirect didn't happen)
+  // This can happen if the required scopes weren't granted.
   if (user && !accessToken) {
-    return (
+     return (
       <Card className="w-full max-w-md text-center">
         <CardHeader>
           <CardTitle>Verification Required</CardTitle>
@@ -55,7 +59,7 @@ function RegistrationComponent() {
     );
   }
   
-  // If no user is authenticated at all.
+  // If there's no user at all, show the initial login prompt.
   return (
     <Card className="w-full max-w-md text-center">
       <CardHeader>
