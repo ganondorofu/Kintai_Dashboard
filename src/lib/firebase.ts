@@ -1,5 +1,6 @@
+
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, getRedirectResult } from "firebase/auth";
+import { getAuth, signInWithRedirect, GithubAuthProvider, signOut, getRedirectResult, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -15,6 +16,9 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Set persistence level
+setPersistence(auth, browserLocalPersistence);
 
 const githubProvider = new GithubAuthProvider();
 // Request access to check organization membership
