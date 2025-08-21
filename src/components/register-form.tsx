@@ -57,15 +57,18 @@ export default function RegisterForm({ token, user, accessToken }: RegisterFormP
     
     // 1. Verify GitHub Organization Membership
     const requiredOrg = process.env.NEXT_PUBLIC_GITHUB_ORG_NAME;
-    if (!requiredOrg) {
+    const altOrg = process.env.NEXT_PUBLIC_GITHUB_ALT_ORG_NAME;
+    const requiredOrgs = [requiredOrg, altOrg].filter(Boolean) as string[];
+
+    if (requiredOrgs.length === 0) {
       toast({ title: 'Configuration Error', description: 'GitHub organization is not configured.', variant: 'destructive' });
       setLoading(false);
       return;
     }
 
-    const member = await isMemberOfOrg(accessToken, requiredOrg);
+    const member = await isMemberOfOrg(accessToken, requiredOrgs);
     if (!member) {
-      toast({ title: 'Access Denied', description: `You are not a member of the required GitHub organization: ${requiredOrg}.`, variant: 'destructive' });
+      toast({ title: 'Access Denied', description: `You are not a member of the required GitHub organizations.`, variant: 'destructive' });
       setLoading(false);
       return;
     }
