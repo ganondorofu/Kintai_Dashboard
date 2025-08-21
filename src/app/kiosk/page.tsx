@@ -18,7 +18,7 @@ const KioskIcon = ({ mode }: { mode: KioskMode }) => {
     case 'waiting':
       return <Nfc className={cn(iconClass, "animate-pulse")} />;
     case 'register_prompt':
-      return <QrCode className={iconClass} />;
+      return <QrCode className={cn(iconClass)} />;
     case 'loading_qr':
         return <Loader2 className={cn(iconClass, "animate-spin")} />;
     case 'success':
@@ -149,53 +149,48 @@ export default function KioskPage() {
       showTemporaryState('error', 'Network Offline', 'Please check connection.');
       return;
     }
+    const trimmedInput = input.trim();
+    if (trimmedInput.length < 3) return; // Ignore very short inputs
+
     if (mode === 'waiting') {
-      handleAttendance(input);
+      handleAttendance(trimmedInput);
     } else if (mode === 'register_prompt') {
-      handleRegistration(input);
+      handleRegistration(trimmedInput);
     }
   }, [mode, handleAttendance, handleRegistration, showTemporaryState, isOnline]);
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (mode === 'register_qr' && e.key !== 'Escape') return;
-
-      if (e.key === '/') {
+      // Allow Escape key to work anytime to reset
+      if (e.key === 'Escape') {
         resetToWaiting();
+        return;
+      }
+      
+      // Allow '/' key only in waiting mode to start registration
+      if (mode === 'waiting' && e.key === '/') {
+        e.preventDefault();
         setMode('register_prompt');
         setMessage('Touch the new NFC tag to register');
         setSubMessage('');
         return;
       }
-      
-      if(e.key === 'Escape'){
-        resetToWaiting();
-        return;
-      }
 
-      if (e.key.length > 1 && e.key !== 'Enter') return;
-      
-      if (inputTimeout.current) clearTimeout(inputTimeout.current);
+      // If QR is shown, don't accept other inputs
+      if (mode === 'register_qr' || mode === 'loading_qr' || mode === 'success' || mode === 'error') return;
 
       if (e.key === 'Enter') {
-         if (inputBuffer.current.length > 5) processInput(inputBuffer.current);
-         inputBuffer.current = '';
-      } else {
+        processInput(inputBuffer.current);
+        inputBuffer.current = ''; // Reset buffer after processing
+      } else if (e.key.length === 1 && /^[a-z0-9]+$/i.test(e.key)) {
+        // Only add alphanumeric characters to the buffer
         inputBuffer.current += e.key;
       }
-
-      inputTimeout.current = setTimeout(() => {
-        if (inputBuffer.current.length > 5) {
-          processInput(inputBuffer.current);
-        }
-        inputBuffer.current = '';
-      }, 500);
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => {
       window.removeEventListener('keydown', handleKeyPress);
-      if (inputTimeout.current) clearTimeout(inputTimeout.current);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [mode, processInput, resetToWaiting]);
