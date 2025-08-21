@@ -10,9 +10,9 @@ import Image from 'next/image';
 import { CheckCircle, Nfc, QrCode, Wifi, WifiOff, XCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type KioskMode = 'waiting' | 'register_prompt' | 'register_qr' | 'loading_qr' | 'success' | 'error';
+type KioskMode = 'waiting' | 'register_prompt' | 'register_qr' | 'loading_qr';
 
-const KioskIcon = ({ mode }: { mode: KioskMode }) => {
+const KioskIcon = ({ mode }: { mode: 'waiting' | 'register_prompt' | 'loading_qr' }) => {
   const iconClass = "size-48 text-gray-400 transition-all duration-500";
   
   switch (mode) {
@@ -22,12 +22,8 @@ const KioskIcon = ({ mode }: { mode: KioskMode }) => {
       return <QrCode className={cn(iconClass)} />;
     case 'loading_qr':
         return <Loader2 className={cn(iconClass, "animate-spin")} />;
-    case 'success':
-      return <CheckCircle className={cn(iconClass, "text-green-400")} />;
-    case 'error':
-      return <XCircle className={cn(iconClass, "text-red-400")} />;
     default:
-      return null;
+      return <Nfc className={cn(iconClass, "animate-pulse")} />;
   }
 };
 
@@ -52,8 +48,7 @@ export default function KioskPage() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
   }, []);
 
-  const showTemporaryState = useCallback((mode: KioskMode, mainMsg: string, subMsg = '', duration = 3000) => {
-    setMode(mode);
+  const showTemporaryMessage = useCallback((mainMsg: string, subMsg = '', duration = 3000) => {
     setMessage(mainMsg);
     setSubMessage(subMsg);
     setInputBuffer('');
@@ -80,7 +75,7 @@ export default function KioskPage() {
       const userSnapshot = await getDocs(userQuery);
 
       if (userSnapshot.empty) {
-        showTemporaryState('error', 'Unregistered Card', 'Press "/" to register this card.');
+        showTemporaryMessage('Unregistered Card', 'Press "/" to register this card.');
         return;
       }
       const userData = userSnapshot.docs[0].data();
@@ -107,13 +102,13 @@ export default function KioskPage() {
       
       const welcomeMsg = `Welcome, ${userData.firstname}!`;
       const actionMsg = logType === 'entry' ? 'Checked In' : 'Checked Out';
-      showTemporaryState('success', welcomeMsg, actionMsg);
+      showTemporaryMessage(welcomeMsg, actionMsg);
 
     } catch (err) {
       console.error(err);
-      showTemporaryState('error', 'An Error Occurred', 'Please try again.');
+      showTemporaryMessage('An Error Occurred', 'Please try again.');
     }
-  }, [showTemporaryState]);
+  }, [showTemporaryMessage]);
 
   const handleRegistration = useCallback(async (cardId: string) => {
     setMode('loading_qr');
@@ -132,31 +127,31 @@ export default function KioskPage() {
         
         const registrationUrl = `${window.location.origin}/register?token=${token}`;
         setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(registrationUrl)}`);
-        setLinkRequestToken(token); // Use token to listen for changes
+        setLinkRequestToken(token);
         setMode('register_qr');
         setMessage('Scan QR code to link your card');
         setSubMessage('Press ESC to cancel');
 
     } catch (err) {
         console.error("Error during registration link generation:", err);
-        showTemporaryState('error', 'Registration Error', 'Could not generate link. Please check the connection and try again.');
+        showTemporaryMessage('Registration Error', 'Could not generate link. Please check connection.');
     }
-  }, [showTemporaryState]);
+  }, [showTemporaryMessage]);
 
   const processInput = useCallback((input: string) => {
     if (!isOnline) {
-      showTemporaryState('error', 'Network Offline', 'Please check connection.');
+      showTemporaryMessage('Network Offline', 'Please check connection.');
       return;
     }
     const trimmedInput = input.trim();
-    if (trimmedInput.length < 3) return; // Ignore very short inputs
+    if (trimmedInput.length < 3) return;
 
     if (mode === 'waiting') {
       handleAttendance(trimmedInput);
     } else if (mode === 'register_prompt') {
       handleRegistration(trimmedInput);
     }
-  }, [mode, handleAttendance, handleRegistration, showTemporaryState, isOnline]);
+  }, [mode, handleAttendance, handleRegistration, showTemporaryMessage, isOnline]);
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -173,8 +168,8 @@ export default function KioskPage() {
         setInputBuffer('');
         return;
       }
-
-      if (mode === 'register_qr' || mode === 'loading_qr' || mode === 'success' || mode === 'error') return;
+      
+      if (mode === 'register_qr' || mode === 'loading_qr') return;
 
       if (e.key === 'Enter') {
         processInput(inputBuffer);
@@ -198,14 +193,14 @@ export default function KioskPage() {
         if (snapshot.empty) return;
         const data = snapshot.docs[0].data() as LinkRequest;
         if (data.status === 'done') {
-            showTemporaryState('success', 'Registration Complete!', 'You can now use your tag to check in.', 4000);
+            showTemporaryMessage('Registration Complete!', 'You can now use your tag to check in.', 4000);
             unsubscribe();
         }
       });
 
       return () => unsubscribe();
     }
-  }, [mode, linkRequestToken, showTemporaryState]);
+  }, [mode, linkRequestToken, showTemporaryMessage]);
 
   const renderContent = () => {
     if (mode === 'register_qr' && qrCodeUrl) {
@@ -215,7 +210,7 @@ export default function KioskPage() {
         </div>
       );
     }
-    return <KioskIcon mode={mode} />;
+    return <KioskIcon mode={mode === 'register_qr' ? 'waiting' : mode} />;
   }
   
   return (
