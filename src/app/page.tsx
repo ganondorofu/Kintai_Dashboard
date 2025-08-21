@@ -26,6 +26,8 @@ export default function Home() {
     setIsProcessingLogin(true);
     try {
       await signInWithGitHub(auth);
+      // The user will be redirected to GitHub and then back.
+      // The AuthProvider will handle the result of the redirect.
     } catch (error: any) {
       console.error('Error signing in with GitHub', error);
       toast({
