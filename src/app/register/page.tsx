@@ -2,9 +2,9 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { GithubAuthProvider, User } from 'firebase/auth';
+import { GithubAuthProvider, User, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { useAuth } from '@/hooks/use-auth';
-import { auth, getGitHubRedirectResult, setPersistence, browserLocalPersistence, signInWithGitHub } from '@/lib/firebase';
+import { auth, getGitHubRedirectResult, signInWithGitHub } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Github, Loader2 } from 'lucide-react';
 import RegisterForm from '@/components/register-form';

@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { addDoc, collection, serverTimestamp, query, where, orderBy, limit, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, query, where, orderBy, limit, getDocs, onSnapshot, writeBatch, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { LinkRequest } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -126,7 +126,7 @@ export default function KioskPage() {
             updatedAt: serverTimestamp(),
         });
         
-        const url = `https://9000-firebase-studio-1755703956488.cluster-wurh6gchdjcjmwrw2tqtufvhss.cloudworkstations.dev/register?token=${token}`;
+        const url = `https://it-kintai.vercel.app/register?token=${token}`;
         setRegistrationUrl(url);
         setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`);
         setLinkRequestToken(token);
@@ -186,7 +186,7 @@ export default function KioskPage() {
       window.removeEventListener('keydown', handleKeyPress);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [inputBuffer, mode, processInput, resetToWaiting]);
+  }, [inputBuffer, processInput, resetToWaiting, mode]);
   
   useEffect(() => {
     if (mode === 'register_qr' && linkRequestToken) {
