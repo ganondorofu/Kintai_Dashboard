@@ -7,13 +7,12 @@ import { ArrowLeft, Users, Calendar, Clock, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { getAllUsers, getDailyAttendanceStatsV2 } from '@/lib/data-adapter';
-import { convertToJapaneseGrade } from '@/lib/utils';
-import type { User } from '@/types';
+import { getAllUsers, getDailyAttendanceStatsV2, getAllTeams } from '@/lib/data-adapter';
+import type { User, Team } from '@/types';
 
 interface TeamStats {
   teamId: string;
-  grade: string;
+  teamName: string;
   members: User[];
   totalMembers: number;
   presentToday: number;
@@ -28,19 +27,23 @@ export default function TeamStatsPage() {
   
   const [teamStats, setTeamStats] = useState<TeamStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [teamDefinitions, setTeamDefinitions] = useState<Team[]>([]);
   const [todayStatsData, setTodayStatsData] = useState<any>(null);
 
   useEffect(() => {
     const fetchTeamStats = async () => {
       try {
-        const users = await getAllUsers();
+        const [users, teams] = await Promise.all([
+          getAllUsers(),
+          getAllTeams()
+        ]);
+        setTeamDefinitions(teams);
         
-        // teamIdが学年を表している場合の処理
-        const teamMembers = users.filter(user => 
-          convertToJapaneseGrade(user.grade) === teamId
-        );
+        const teamMembers = users.filter(user => user.teamId === teamId);
+        
+        const currentTeam = teams.find(t => t.id === teamId);
 
-        if (teamMembers.length === 0) {
+        if (teamMembers.length === 0 || !currentTeam) {
           setTeamStats(null);
           setLoading(false);
           return;
@@ -50,7 +53,7 @@ export default function TeamStatsPage() {
         const todayStats = await getDailyAttendanceStatsV2(new Date());
         setTodayStatsData(todayStats);
 
-        const currentTeamStats = todayStats.find(t => t.teamName === teamId);
+        const currentTeamStats = todayStats.find(t => t.teamId === teamId);
         const presentToday = currentTeamStats?.gradeStats.reduce((acc, g) => acc + g.count, 0) || 0;
 
         // 月間出席率を計算（実際のデータベースから取得する場合は別途実装が必要）
@@ -60,7 +63,7 @@ export default function TeamStatsPage() {
 
         setTeamStats({
           teamId,
-          grade: teamId,
+          teamName: currentTeam.name,
           members: teamMembers,
           totalMembers: teamMembers.length,
           presentToday,
@@ -74,7 +77,9 @@ export default function TeamStatsPage() {
       }
     };
 
-    fetchTeamStats();
+    if (teamId) {
+        fetchTeamStats();
+    }
   }, [teamId]);
 
   if (loading) {
@@ -120,7 +125,7 @@ export default function TeamStatsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center">
             <Users className="h-6 w-6 mr-2" />
-            {teamStats.grade} 班統計
+            {teamStats.teamName} 班統計
           </h1>
           <p className="text-gray-600 mt-1">
             班全体の出勤状況と統計情報
@@ -206,7 +211,7 @@ export default function TeamStatsPage() {
                       >
                         {member.firstname} {member.lastname}
                       </button>
-                      <p className="text-sm text-gray-500">{member.email}</p>
+                      <p className="text-sm text-gray-500">{member.github}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
