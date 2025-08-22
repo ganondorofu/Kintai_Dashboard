@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getUserAttendanceLogsV2, getWorkdaysInRange, getDailyAttendanceStatsV2 } from '@/lib/data-adapter';
+import { getUserAttendanceLogsV2, getWorkdaysInRange, getDailyAttendanceStatsV2, safeTimestampToDate } from '@/lib/data-adapter';
 import type { AppUser, AttendanceLog } from '@/types';
 import { Calendar, Clock, TrendingUp, Users } from 'lucide-react';
 import { format, startOfDay, endOfDay, subDays } from 'date-fns';
@@ -65,7 +66,10 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
     const logsByDate = new Map<string, AttendanceLog[]>();
 
     userLogs.forEach(log => {
-        const dateKey = format(log.timestamp.toDate(), 'yyyy-MM-dd');
+        const logDate = safeTimestampToDate(log.timestamp);
+        if (!logDate) return;
+
+        const dateKey = format(logDate, 'yyyy-MM-dd');
         if (!logsByDate.has(dateKey)) {
             logsByDate.set(dateKey, []);
         }
@@ -76,12 +80,12 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
     summary.attendedDays = attendedDates.size;
 
     logsByDate.forEach((dayLogs) => {
-        const entries = dayLogs.filter(l => l.type === 'entry').sort((a,b) => a.timestamp.toMillis() - b.timestamp.toMillis());
-        const exits = dayLogs.filter(l => l.type === 'exit').sort((a,b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+        const entries = dayLogs.filter(l => l.type === 'entry').sort((a,b) => (safeTimestampToDate(a.timestamp)?.getTime() || 0) - (safeTimestampToDate(b.timestamp)?.getTime() || 0));
+        const exits = dayLogs.filter(l => l.type === 'exit').sort((a,b) => (safeTimestampToDate(a.timestamp)?.getTime() || 0) - (safeTimestampToDate(b.timestamp)?.getTime() || 0));
 
         if (entries.length > 0 && exits.length > 0) {
-            const firstEntry = entries[0].timestamp.toMillis();
-            const lastExit = exits[exits.length - 1].timestamp.toMillis();
+            const firstEntry = safeTimestampToDate(entries[0].timestamp)?.getTime() || 0;
+            const lastExit = safeTimestampToDate(exits[exits.length - 1].timestamp)?.getTime() || 0;
             if(lastExit > firstEntry) {
                 workDurations.push((lastExit - firstEntry) / (1000 * 60 * 60));
             }
