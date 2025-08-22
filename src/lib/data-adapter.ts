@@ -698,7 +698,7 @@ export const getDailyAttendanceStatsV2 = async (
       ...doc.data()
     } as AttendanceLog));
     
-    // If no logs in new structure, calculate from old structure.
+    // 新しい構造にログがない場合は、古い構造から計算する
     if(logs.length === 0) {
       return calculateDailyAttendanceFromLogs(targetDate);
     }
@@ -1306,6 +1306,8 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
   console.log('自動退勤処理を開始します...');
   const now = new Date();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const { year, month, day } = getAttendancePath(now);
+  const dateKey = `${year}-${month}-${day}`;
 
   let successCount = 0;
   let noActionCount = 0;
@@ -1316,34 +1318,48 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
     const batch = writeBatch(db);
 
     for (const user of allUsers) {
-      // 今日の最後のログを取得
-      const logsRef = collection(db, 'attendance_logs');
-      const q = query(
-        logsRef,
+      // 新しいデータ構造から最後のログを取得
+      const newLogsRef = collection(db, 'attendances', dateKey, 'logs');
+      const qNew = query(
+        newLogsRef,
         where('uid', '==', user.uid),
-        where('timestamp', '>=', startOfDay),
         orderBy('timestamp', 'desc'),
         limit(1)
       );
-      const logSnapshot = await getDocs(q);
-
-      if (!logSnapshot.empty) {
-        const lastLog = logSnapshot.docs[0].data();
-        // 最後のログが出勤(entry)の場合のみ、退勤処理を行う
-        if (lastLog.type === 'entry') {
-          const logId = `${user.uid}_${Date.now()}`;
-          const exitLogRef = doc(db, 'attendance_logs', logId);
-          batch.set(exitLogRef, {
-            uid: user.uid,
-            type: 'exit',
-            timestamp: serverTimestamp(),
-            cardId: user.cardId || 'auto_checkout',
-          });
-          successCount++;
-          console.log(`退勤記録を追加: ${user.firstname} ${user.lastname}`);
-        } else {
-          noActionCount++;
+      const newLogSnapshot = await getDocs(qNew);
+      
+      let lastLog: DocumentData | null = null;
+      if (!newLogSnapshot.empty) {
+        lastLog = newLogSnapshot.docs[0].data();
+      } else {
+        // 新しい構造にない場合、古い構造もチェック
+        const oldLogsRef = collection(db, 'attendance_logs');
+        const qOld = query(
+          oldLogsRef,
+          where('uid', '==', user.uid),
+          where('timestamp', '>=', startOfDay),
+          orderBy('timestamp', 'desc'),
+          limit(1)
+        );
+        const oldLogSnapshot = await getDocs(qOld);
+        if (!oldLogSnapshot.empty) {
+          lastLog = oldLogSnapshot.docs[0].data();
         }
+      }
+
+      if (lastLog && lastLog.type === 'entry') {
+        const logId = generateAttendanceLogId(user.uid);
+        const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
+        
+        batch.set(newLogRef, {
+          uid: user.uid,
+          type: 'exit',
+          timestamp: serverTimestamp(),
+          cardId: user.cardId || 'auto_checkout',
+          memo: 'Forced checkout'
+        });
+        successCount++;
+        console.log(`退勤記録を追加: ${user.firstname} ${user.lastname}`);
       } else {
         noActionCount++;
       }
@@ -1354,6 +1370,7 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
     return { success: successCount, noAction: noActionCount, failed: failureCount };
   } catch (error) {
     console.error('自動退勤処理中にエラーが発生しました:', error);
-    return { success: successCount, noAction: noActionCount, failed: failureCount + 1 };
+    // 全件失敗として返す
+    return { success: 0, noAction: 0, failed: (await getAllUsers()).length };
   }
 };

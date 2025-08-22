@@ -1,11 +1,12 @@
 
+
 'use client';
 
 import { useState } from 'react';
 import { useAuth } from '@/components/firebase-auth-provider';
 import { TeamManagement } from './team-management';
 import { AttendanceCalendar } from './attendance-calendar';
-import { getDailyAttendanceStatsV2, formatKisei, forceClockOutAllUsers } from '@/lib/data-adapter';
+import { forceClockOutAllUsers } from '@/lib/data-adapter';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
