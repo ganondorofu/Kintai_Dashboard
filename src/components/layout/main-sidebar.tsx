@@ -17,8 +17,9 @@ import {
   LogOut,
   Shield,
 } from 'lucide-react';
-import { getDailyAttendanceStats, getAllTeams, formatKisei } from '@/lib/data-adapter';
+import { getDailyAttendanceStatsV2, getAllTeams, formatKisei } from '@/lib/data-adapter';
 import type { AppUser, Team } from '@/types';
+import { cn } from '@/lib/utils';
 
 interface TeamMember {
   uid: string;
@@ -68,7 +69,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
       try {
         setLoading(true);
         const [todayStats, fetchedTeams] = await Promise.all([
-          getDailyAttendanceStats(new Date()),
+          getDailyAttendanceStatsV2(new Date()),
           getAllTeams(),
         ]);
         
