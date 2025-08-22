@@ -25,11 +25,13 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
       const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       
-      const logs = await getUserAttendanceLogsV2(user.uid, startOfDay, today, 10);
+      const logs = await getUserAttendanceLogsV2(user.uid, startOfDay, today, 50); // 1日のログを十分に取得
       setRecentLogs(logs);
       
       if (logs.length > 0) {
-        setLastAction(logs[0].type);
+        // timestampでソートして最新のものを取得
+        const sortedLogs = [...logs].sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+        setLastAction(sortedLogs[0].type);
       } else {
         setLastAction(null);
       }
@@ -53,8 +55,10 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
 
   // 最後の出勤時刻からの経過時間
   const getWorkingTime = () => {
-    const lastEntry = recentLogs.find(log => log.type === 'entry');
-    if (lastEntry && lastAction === 'entry') {
+    if (lastAction !== 'entry') return null;
+    const sortedLogs = [...recentLogs].sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+    const lastEntry = sortedLogs.find(log => log.type === 'entry');
+    if (lastEntry) {
       return formatDistanceToNow(lastEntry.timestamp.toDate(), { locale: ja, addSuffix: false });
     }
     return null;
@@ -131,7 +135,7 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
             </div>
           ) : (
             <div className="space-y-3">
-              {recentLogs.map((log) => (
+              {recentLogs.sort((a,b) => a.timestamp.toMillis() - b.timestamp.toMillis()).map((log) => (
                 <div key={log.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
                     {log.type === 'entry' ? (
