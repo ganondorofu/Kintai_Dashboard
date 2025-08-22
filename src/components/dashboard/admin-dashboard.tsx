@@ -5,11 +5,13 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/components/firebase-auth-provider';
 import { TeamManagement } from './team-management';
 import { AttendanceCalendar } from './attendance-calendar';
-import { getDailyAttendanceStatsV2, formatKiseiAsGrade } from '@/lib/data-adapter';
+import { getDailyAttendanceStatsV2, formatKiseiAsGrade, forceClockOutAllUsers } from '@/lib/data-adapter';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'calendar'>('overview');
   const [todayStats, setTodayStats] = useState<any[]>([]);
   const [adminSummary, setAdminSummary] = useState({
@@ -19,6 +21,7 @@ export default function AdminDashboard() {
     attendanceRate: 0
   });
   const [loading, setLoading] = useState(true);
+  const [isForcingCheckout, setIsForcingCheckout] = useState(false);
 
   // 今日の統計を取得
   const loadTodayStats = async () => {
@@ -60,6 +63,27 @@ export default function AdminDashboard() {
 
   const refreshData = () => {
     loadTodayStats();
+  };
+
+  const handleForceCheckout = async () => {
+    setIsForcingCheckout(true);
+    try {
+      const result = await forceClockOutAllUsers();
+      toast({
+        title: "強制退勤処理が完了しました",
+        description: `成功: ${result.success}件, 対象外: ${result.noAction}件, 失敗: ${result.failed}件`,
+      });
+      refreshData();
+    } catch (error) {
+      console.error('強制退勤エラー:', error);
+      toast({
+        title: "エラー",
+        description: "強制退勤処理中にエラーが発生しました。",
+        variant: "destructive",
+      });
+    } finally {
+      setIsForcingCheckout(false);
+    }
   };
 
   if (!user) return null;
@@ -111,9 +135,14 @@ export default function AdminDashboard() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold">今日の統計</h2>
-                <Button onClick={refreshData} variant="outline" disabled={loading}>
-                  {loading ? '読み込み中...' : '更新'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button onClick={refreshData} variant="outline" disabled={loading}>
+                    {loading ? '読み込み中...' : '更新'}
+                  </Button>
+                  <Button onClick={handleForceCheckout} variant="destructive" disabled={isForcingCheckout}>
+                    {isForcingCheckout ? '処理中...' : '強制全員退勤'}
+                  </Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
