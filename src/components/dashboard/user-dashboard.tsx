@@ -14,10 +14,10 @@ export default function UserDashboard({ user }: UserDashboardProps) {
     <div className="space-y-6">
       <div className="bg-white shadow rounded-lg p-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          こんにちは、{user.firstname} {user.lastname}さん！
+          個人ダッシュボード
         </h1>
         <p className="text-gray-600">
-          あなたの個人ダッシュボードです。
+          こんにちは、{user.firstname} {user.lastname}さん！あなたの個人ダッシュボードです。
         </p>
       </div>
       

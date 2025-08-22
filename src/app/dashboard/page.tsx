@@ -30,12 +30,18 @@ export default function DashboardPage() {
     );
   }
   
-  // ユーザーの役割に応じて表示するダッシュボードを切り替え
-  if (appUser.role === 'admin') {
-    return <AdminDashboard />;
-  } else {
-    return <UserDashboard user={appUser} />;
-  }
+  return (
+    <div className="space-y-8">
+      <UserDashboard user={appUser} />
+      
+      {appUser.role === 'admin' && (
+        <>
+          <div className="border-t-2 border-dashed border-gray-300 my-8"></div>
+          <AdminDashboard />
+        </>
+      )}
+    </div>
+  );
 }
 
 
