@@ -4,19 +4,32 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { auth, signInWithGitHub } from '@/lib/firebase';
-import { Button } from '@/components/ui/button';
-import { Github, Loader2 } from 'lucide-react';
 import RegisterForm from '@/components/register-form';
+import { getGitHubAuthUrl } from '@/lib/oauth';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, Github } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
-function RegistrationComponent() {
+function RegisterContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
-  const { user: authUser, loading: authLoading, accessToken } = useAuth();
+  const { user: authUser, appUser, loading: authLoading, accessToken } = useAuth();
+  const { toast } = useToast();
 
-  const handleLogin = async () => {
-    await signInWithGitHub(auth);
+  const handleLogin = () => {
+    try {
+      const authUrl = getGitHubAuthUrl();
+      console.log('[Register] Redirecting to GitHub OAuth:', authUrl);
+      window.location.href = authUrl;
+    } catch (error: any) {
+      console.error('[Register] OAuth URL generation error:', error);
+      toast({
+        title: 'Login Failed',
+        description: error?.message || 'Unable to initiate GitHub sign-in.',
+        variant: 'destructive'
+      });
+    }
   };
   
   if (authLoading) {
@@ -28,8 +41,20 @@ function RegistrationComponent() {
     );
   }
 
-  if (authUser && accessToken) {
-    return <RegisterForm token={token!} user={authUser} accessToken={accessToken} />;
+  if (authUser && accessToken && token) {
+    console.log('[Register Page] Rendering RegisterForm with accessToken:', accessToken ? 'Available' : 'Not available');
+    return <RegisterForm user={authUser} accessToken={accessToken} token={token} />;
+  }
+  
+  if (authUser && accessToken && !token) {
+    return (
+      <div className="flex flex-col items-center gap-4 text-center">
+        <p className="text-muted-foreground">No registration token found in URL. Please use a valid registration link.</p>
+        <Button onClick={() => window.history.back()} className="gap-2">
+          Go Back
+        </Button>
+      </div>
+    );
   }
   
   if (authUser && !accessToken) {
@@ -75,7 +100,7 @@ export default function RegisterPage() {
             <p className="text-muted-foreground">Loading registration...</p>
           </div>
         }>
-            <RegistrationComponent />
+            <RegisterContent />
         </Suspense>
     )
 }
