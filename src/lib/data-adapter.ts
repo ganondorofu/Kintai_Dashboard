@@ -124,8 +124,11 @@ export const getAllUsers = async (): Promise<AppUser[]> => {
 
     // 各ユーザーの最新の勤怠ステータスを取得
     const userStatusPromises = users.map(async (user) => {
+      const { year, month, day } = getAttendancePath(new Date());
+      const dateKey = `${year}-${month}-${day}`;
+      
       const q = query(
-        collection(db, 'attendances', getAttendancePath(new Date()).fullPath.replace(/\//g, '-'), 'logs'),
+        collection(db, 'attendances', dateKey, 'logs'),
         where('uid', '==', user.uid),
         orderBy('timestamp', 'desc'),
         limit(1)
@@ -1492,9 +1495,11 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     const userId = userDoc.id;
 
     // ユーザーの現在の勤怠ステータスを確認
-    const currentStatus = userData.status || 'inactive'; // 'active' or 'inactive'
-    const newStatus = currentStatus === 'active' ? 'inactive' : 'exit';
-    const logType: 'entry' | 'exit' = newStatus === 'active' ? 'entry' : 'exit';
+    const currentStatus = userData.status || 'inactive';
+    const isCurrentlyActive = currentStatus === 'active';
+    
+    const newStatus = isCurrentlyActive ? 'inactive' : 'active';
+    const logType: 'entry' | 'exit' = isCurrentlyActive ? 'exit' : 'entry';
 
     const batch = writeBatch(db);
 
