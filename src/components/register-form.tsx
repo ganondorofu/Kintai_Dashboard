@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { User } from 'firebase/auth';
+import type { GitHubUser } from '@/lib/oauth';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -23,12 +23,14 @@ const formSchema = z.object({
   grade: z.coerce.number().min(1, 'Grade is required'),
 });
 
+import type { GitHubUser } from '@/lib/oauth';
+
 type RegisterFormValues = z.infer<typeof formSchema>;
 
 interface RegisterFormProps {
-  token: string;
-  user: User;
+  user: GitHubUser;
   accessToken: string;
+  token: string;
 }
 
 // Mock teams data. In a real app, this would come from Firestore.
@@ -38,15 +40,15 @@ const teams = [
     { id: 'pm', name: 'Project Management' },
 ];
 
-export default function RegisterForm({ token, user, accessToken }: RegisterFormProps) {
+export default function RegisterForm({ user, accessToken, token }: RegisterFormProps) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      firstname: user.displayName?.split(' ')[0] || '',
-      lastname: user.displayName?.split(' ')[1] || '',
+      firstname: user.name?.split(' ')[0] || '',
+      lastname: user.name?.split(' ')[1] || '',
       teamId: '',
       grade: undefined,
     },
@@ -66,7 +68,19 @@ export default function RegisterForm({ token, user, accessToken }: RegisterFormP
       return;
     }
 
-    const member = await isMemberOfOrg(accessToken, requiredOrgs);
+    let member = false;
+    console.log('[RegisterForm] Checking GitHub token availability:', accessToken ? 'Token available' : 'No token');
+    console.log('[RegisterForm] Required orgs:', requiredOrgs);
+    
+    try {
+      member = await isMemberOfOrg(accessToken, requiredOrgs);
+      console.log('[RegisterForm] Organization check result:', member);
+    } catch (err: any) {
+      console.error('[RegisterForm] GitHub org check failed:', err);
+      toast({ title: 'Verification Error', description: 'Unable to verify GitHub organization membership. Please try again.', variant: 'destructive' });
+      setLoading(false);
+      return;
+    }
     if (!member) {
       toast({ title: 'Access Denied', description: `You are not a member of the required GitHub organizations.`, variant: 'destructive' });
       setLoading(false);
@@ -91,10 +105,14 @@ export default function RegisterForm({ token, user, accessToken }: RegisterFormP
       const cardId = linkRequestData.cardId;
 
       // 3. Create the user document
-      const userDocRef = doc(db, 'users', user.uid);
+      const userDocRef = doc(db, 'users', user.id.toString());
       batch.set(userDocRef, {
-        uid: user.uid,
-        github: user.providerData.find(p => p.providerId === 'github.com')?.email || 'N/A',
+        uid: user.id.toString(),
+        github: user.email || user.login,
+        githubLogin: user.login,
+        githubId: user.id,
+        name: user.name || user.login,
+        avatarUrl: user.avatar_url,
         cardId: cardId,
         firstname: values.firstname,
         lastname: values.lastname,
@@ -107,20 +125,22 @@ export default function RegisterForm({ token, user, accessToken }: RegisterFormP
       // 4. Update the link request
       batch.update(linkRequestDoc.ref, {
         status: 'done',
-        uid: user.uid,
+        uid: user.id.toString(),
         updatedAt: serverTimestamp(),
       });
 
-      // 5. Commit the batch
-      await batch.commit();
+  // 5. Commit the batch
+  await batch.commit();
 
-      // Clear session storage token after successful use
-      sessionStorage.removeItem('github_access_token');
-      
-      toast({ title: 'Registration Successful!', description: 'You can now use your card to log attendance.' });
+  // Clear session storage token after successful use
+  try { sessionStorage.removeItem('github_access_token'); } catch (e) {}
+
+  toast({ title: 'Registration Successful!', description: 'You can now use your card to log attendance.' });
 
     } catch (e: any) {
-       toast({ title: 'Registration Failed', description: e.message || 'An unexpected error occurred.', variant: 'destructive' });
+   console.error('[RegisterForm] Registration error:', e);
+   // Show friendly message, avoid leaking internal error details
+   toast({ title: 'Registration Failed', description: e?.message || 'An unexpected error occurred. Please try again or contact an admin.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }

@@ -1,58 +1,33 @@
 
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Github, Loader2 } from 'lucide-react';
-
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/use-auth';
-import { auth, signInWithGitHub } from '@/lib/firebase';
-import { useToast } from '@/hooks/use-toast';
 
 export default function Home() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    if (!loading && user) {
-      router.push('/dashboard');
-    }
-  }, [user, loading, router]);
-
-  const handleLogin = async () => {
-    try {
-      await signInWithGitHub(auth);
-    } catch (error: any) {
-      console.error('Error signing in with GitHub', error);
-      toast({
-        title: "Login Failed",
-        description: error.message || "An unexpected error occurred during sign-in.",
-        variant: "destructive",
-      });
-    }
-  };
-  
-  if (loading || user) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-background p-4">
-      <div className="text-center">
-        <h1 className="text-5xl font-bold text-primary font-headline">Club Attendance</h1>
-        <p className="mt-4 text-lg text-muted-foreground">
-          NFC-based attendance system for your club.
-        </p>
-        <Button onClick={handleLogin} className="mt-8" size="lg">
-          <Github className="mr-2 h-5 w-5" />
-          Login with GitHub
-        </Button>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 space-y-8">
+      <div className="text-center space-y-4">
+        <h1 className="text-4xl font-bold text-gray-900">IT勤怠管理システム</h1>
+        <p className="text-xl text-gray-600">STEM研究部</p>
+      </div>
+      
+      <div className="flex flex-col sm:flex-row gap-4">
+        <Link href="/kiosk">
+          <Button size="lg" className="w-full sm:w-auto">
+            NFC勤怠記録
+          </Button>
+        </Link>
+        <Link href="/login">
+          <Button variant="outline" size="lg" className="w-full sm:w-auto">
+            管理画面ログイン
+          </Button>
+        </Link>
+      </div>
+      
+      <div className="text-center text-sm text-gray-500 space-y-1">
+        <p>NFCカードをタッチして出退勤を記録</p>
+        <p>管理者は勤怠状況を確認できます</p>
       </div>
     </div>
   );

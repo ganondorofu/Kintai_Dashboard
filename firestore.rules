@@ -1,0 +1,65 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ユーザー情報: 認証済みユーザーのみ読み取り可能
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // 出退勤ログ（従来版）: 認証済みユーザーのみ読み取り可能、本人の記録は作成可能
+    match /attendance_logs/{logId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+                   request.auth.uid == resource.data.uid;
+    }
+    
+        // 出退勤ログ（新しい階層構造）: /attendances/{dateKey}/logs/{logId}
+    match /attendances/{dateKey}/logs/{logId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+                   request.auth.uid == resource.data.uid;
+    }
+    
+    // 年コレクション: 認証済みユーザーのみ読み取り可能
+    match /attendances/{year} {
+      allow read: if request.auth != null;
+    }
+    
+    // 月コレクション: 認証済みユーザーのみ読み取り可能
+    match /attendances/{year}/{month} {
+      allow read: if request.auth != null;
+    }
+    
+    // 日コレクション: 認証済みユーザーのみ読み取り可能
+    match /attendances/{year}/{month}/{day} {
+      allow read: if request.auth != null;
+    }
+    
+    // リンクリクエスト: 未認証ユーザーでも作成可能（QRコード連携用）
+    // 認証済みユーザーは読み取り・更新可能
+    match /link_requests/{requestId} {
+      allow create: if true; // Raspberry Pi側での未認証作成を許可
+      allow read, update: if request.auth != null;
+    }
+    
+    // チーム情報: 認証済みユーザーのみ読み取り可能
+    match /teams/{teamId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // 管理者権限は別途実装
+    }
+    
+    // 労働日: 認証済みユーザーのみ読み取り可能
+    match /workdays/{workdayId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // 管理者権限は別途実装
+    }
+    
+    // 月次サマリー: 認証済みユーザーのみ読み取り可能
+    match /summary/{summaryId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // 管理者権限は別途実装
+    }
+  }
+}

@@ -1,11 +1,11 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from '@/components/auth-provider';
+import { AuthProvider } from '@/components/firebase-auth-provider';
 
 export const metadata: Metadata = {
-  title: 'Club Attendance',
-  description: 'Attendance Management System for Clubs',
+  title: 'IT勤怠管理システム',
+  description: 'IT部の勤怠管理システム',
 };
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="ja" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

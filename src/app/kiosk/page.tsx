@@ -126,7 +126,8 @@ export default function KioskPage() {
             updatedAt: serverTimestamp(),
         });
         
-        const url = `https://it-kintai.vercel.app/register?token=${token}`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost';
+  const url = `${appUrl.replace(/\/+$/, '')}/register?token=${token}`;
         setRegistrationUrl(url);
         setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`);
         setLinkRequestToken(token);
