@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +20,7 @@ export const UserInfoCard: React.FC<UserInfoCardProps> = ({ user }) => {
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          <div><strong>名前:</strong> {user.lastname} {user.firstname}</div>
+          <div><strong>名前:</strong> {user.firstname} {user.lastname}</div>
           <div><strong>GitHubアカウント:</strong> {user.github}</div>
           <div><strong>班:</strong> {convertPeriodToGrade(user.teamId)}</div>
           <div><strong>ロール:</strong> 

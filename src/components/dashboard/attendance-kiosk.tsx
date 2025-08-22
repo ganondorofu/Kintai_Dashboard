@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -58,8 +59,8 @@ export const AttendanceKiosk: React.FC<AttendanceKioskProps> = ({ user, onAttend
       await createAttendanceLogV2(user.uid, type);
       
       const message = type === 'entry' 
-        ? `${user.lastname}さん、いってらっしゃい` 
-        : `${user.lastname}さん、お疲れ様でした`;
+        ? `${user.firstname}さん、いってらっしゃい` 
+        : `${user.firstname}さん、お疲れ様でした`;
       
       setGreeting(message);
       setShowGreeting(true);
@@ -189,7 +190,7 @@ export const AttendanceKiosk: React.FC<AttendanceKioskProps> = ({ user, onAttend
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            <div><strong>名前:</strong> {user.lastname} {user.firstname}</div>
+            <div><strong>名前:</strong> {user.firstname} {user.lastname}</div>
             <div><strong>GitHubアカウント:</strong> {user.github}</div>
             <div><strong>班:</strong> {user.teamId || '未所属'}</div>
           </div>

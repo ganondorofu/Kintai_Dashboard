@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -148,7 +149,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
                 {filteredUsers.map((user) => (
                   <tr key={user.uid}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {user.lastname} {user.firstname}
+                      {user.firstname} {user.lastname}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {user.github}
@@ -216,7 +217,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
                       return (
                         <tr key={log.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {user ? `${user.lastname} ${user.firstname}` : log.uid}
+                            {user ? `${user.firstname} ${user.lastname}` : log.uid}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.timestamp && typeof log.timestamp.toDate === 'function' 
