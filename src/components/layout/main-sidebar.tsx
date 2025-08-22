@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -98,7 +99,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
               totalCount: 0
             };
           }
-
+          
           let isPresent = false;
           const teamStat = todayStats.find(stat => stat.teamId === teamId);
            if(teamStat) {

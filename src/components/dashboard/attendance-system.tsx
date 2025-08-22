@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -107,7 +108,7 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
           )}
           
           <div className="text-center text-sm text-gray-600 p-4 bg-gray-50 rounded-lg">
-            {lastAction === 'entry' && '現在勤務中です。お疲れ様です！'}
+            {lastAction === 'entry' && '現在出勤中です。お疲れ様です！'}
             {lastAction === 'exit' && '退勤済みです。本日もお疲れ様でした。'}
             {lastAction === null && '今日はまだ出勤記録がありません。'}
              <p className="text-xs text-gray-400 mt-2">勤怠の記録はNFCカードで行ってください。</p>
