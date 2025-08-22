@@ -7,7 +7,7 @@ import { ArrowLeft, Users, Calendar, Clock, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { getAllUsers, getTodayAttendanceStats } from '@/lib/data-adapter';
+import { getAllUsers, getDailyAttendanceStatsV2 } from '@/lib/data-adapter';
 import { convertToJapaneseGrade } from '@/lib/utils';
 import type { User } from '@/types';
 
@@ -47,16 +47,16 @@ export default function TeamStatsPage() {
         }
 
         // 今日の出席状況を取得
-        const todayStats = await getTodayAttendanceStats();
+        const todayStats = await getDailyAttendanceStatsV2(new Date());
         setTodayStatsData(todayStats);
-        const gradeStats = todayStats?.statsByGrade?.[teamMembers[0]?.grade];
-        const presentToday = gradeStats?.present || 0;
+
+        const currentTeamStats = todayStats.find(t => t.teamName === teamId);
+        const presentToday = currentTeamStats?.gradeStats.reduce((acc, g) => acc + g.count, 0) || 0;
 
         // 月間出席率を計算（実際のデータベースから取得する場合は別途実装が必要）
         // ここでは暫定的に今日のデータから推定
-        const averageAttendance = gradeStats ? 
-          Math.round((gradeStats.present / gradeStats.total) * 100) : 
-          Math.round((presentToday / teamMembers.length) * 100);
+        const averageAttendance = teamMembers.length > 0 ? 
+          Math.round((presentToday / teamMembers.length) * 100) : 0;
 
         setTeamStats({
           teamId,
@@ -178,10 +178,17 @@ export default function TeamStatsPage() {
           <div className="space-y-3">
             {teamStats.members.map((member) => {
               // 今日の統計から実際の出席状況を確認
-              const memberPresentToday = todayStatsData?.statsByGrade?.[member.grade]?.users?.some(
-                (u: any) => u.uid === member.uid
-              ) || false;
-              const isPresent = memberPresentToday;
+              let isPresent = false;
+              const teamStat = todayStatsData?.find((t: any) => t.teamId === member.teamId);
+              if (teamStat) {
+                const gradeStat = teamStat.gradeStats.find((g: any) => g.grade === member.grade);
+                if (gradeStat) {
+                  const userInStats = gradeStat.users.find((u: any) => u.uid === member.uid);
+                  if (userInStats) {
+                    isPresent = userInStats.isPresent;
+                  }
+                }
+              }
               const checkInTime = isPresent ? new Date() : null; // 実際のチェックイン時間は別途取得が必要
 
               return (

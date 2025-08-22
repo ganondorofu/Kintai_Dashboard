@@ -16,7 +16,19 @@ import {
   Users,
   LogOut
 } from 'lucide-react';
-import { getTodayAttendanceStats, debugAttendanceLogs, createTodayTestAttendanceLogs } from '@/lib/data-adapter';
+import { getDailyAttendanceStatsV2, debugAttendanceLogs } from '@/lib/data-adapter';
+
+interface TeamMember {
+  uid: string;
+  firstname: string;
+  lastname: string;
+  github: string;
+  isPresent: boolean;
+  lastAttendance?: {
+    type: 'entry' | 'exit';
+    timestamp: string;
+  };
+}
 
 interface TeamData {
   teamId: string;
@@ -64,15 +76,9 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
       }
 
       try {
-        const today = new Date();
-        console.log('MainSidebar: Fetching today stats for:', today);
+        setLoading(true);
+        const todayStats = await getDailyAttendanceStatsV2(new Date());
         
-        // デバッグ用：出席ログをチェック
-        await debugAttendanceLogs();
-        
-        const todayStats = await getTodayAttendanceStats();
-        console.log('MainSidebar: Today stats received:', todayStats);
-
         // 管理者か一般ユーザーかでフィルタリング
         const isAdmin = user?.role === 'admin';
         const currentUserGrade = user?.grade;
@@ -98,9 +104,18 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
           }
 
           // 今日の出席状況を確認
-          const userGradeStats = todayStats?.statsByGrade?.[member.grade];
-          const isPresent = userGradeStats?.users?.some((u: any) => u.uid === member.uid) || false;
-
+          let isPresent = false;
+          const teamStat = todayStats.find(stat => stat.teamId === teamId);
+          if(teamStat) {
+            const gradeStat = teamStat.gradeStats.find(gs => gs.grade === member.grade);
+            if(gradeStat){
+                const userInStats = gradeStat.users.find(u => u.uid === member.uid);
+                if (userInStats) {
+                    isPresent = userInStats.isPresent;
+                }
+            }
+          }
+          
           acc[teamId].members.push({
             ...member,
             isPresent
@@ -117,7 +132,6 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
           a.grade.localeCompare(b.grade, 'ja')
         );
 
-        console.log('MainSidebar: Sorted teams:', sortedTeams);
         setTeams(sortedTeams);
       } catch (error) {
         console.error('班データの構築に失敗:', error);
