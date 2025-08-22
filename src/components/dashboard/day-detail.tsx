@@ -3,7 +3,7 @@
 
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { convertPeriodToGrade, convertGradeToDisplay } from '@/lib/attendance-utils';
+import { convertGradeToDisplay } from '@/lib/attendance-utils';
 import type { DayStats } from '@/hooks/use-attendance-data';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
@@ -52,7 +52,7 @@ export const DayDetail: React.FC<DayDetailProps> = ({
                                 </AccordionTrigger>
                                 <AccordionContent className="pt-2">
                                     <div className="space-y-1 border-t pt-2 mt-1">
-                                    {gradeStat.users.filter(u => u.isPresent).map(user => (
+                                    {gradeStat.users?.filter(u => u.isPresent).map(user => (
                                         <div key={user.uid} className="text-xs text-gray-600">
                                         {user.lastname || ''} {user.firstname || ''}
                                         </div>
