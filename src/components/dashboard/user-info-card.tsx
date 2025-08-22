@@ -20,11 +20,9 @@ export const UserInfoCard: React.FC<UserInfoCardProps> = ({ user }) => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch last log
         const logs = await getUserAttendanceLogsV2(user.uid, undefined, undefined, 1);
         setLastLog(logs.length > 0 ? logs[0] : null);
 
-        // Fetch team name
         if (user.teamId) {
           const teams = await getAllTeams();
           const team = teams.find(t => t.id === user.teamId);
@@ -46,6 +44,8 @@ export const UserInfoCard: React.FC<UserInfoCardProps> = ({ user }) => {
   const currentStatus = loading ? '確認中...' : (lastLog?.type === 'entry' ? '出勤中' : '退勤済み');
   const statusColor = currentStatus === '出勤中' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800';
 
+  const teamNameToDisplay = loading ? '読み込み中...' : (teamName || '未所属');
+
   return (
     <Card>
       <CardHeader>
@@ -59,7 +59,7 @@ export const UserInfoCard: React.FC<UserInfoCardProps> = ({ user }) => {
           </div>
           <div className="flex justify-between items-center text-sm">
             <span className="text-muted-foreground">所属班</span>
-            <span className="font-semibold">{teamName ?? '読み込み中...'}</span>
+            <span className="font-semibold">{teamNameToDisplay}</span>
           </div>
           <div className="flex justify-between items-center text-sm">
             <span className="text-muted-foreground">勤務状況</span>
