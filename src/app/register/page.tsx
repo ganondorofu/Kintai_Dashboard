@@ -1,11 +1,11 @@
 
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import RegisterForm from '@/components/register-form';
-import { getGitHubAuthUrl } from '@/lib/oauth';
+import { getGitHubAuthUrl, updateLinkRequestStatus } from '@/lib/oauth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Github } from 'lucide-react';
@@ -16,6 +16,12 @@ function RegisterContent() {
   const token = searchParams.get('token');
   const { user: authUser, appUser, loading: authLoading, accessToken } = useAuth();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (token) {
+        updateLinkRequestStatus(token, 'opened');
+    }
+  }, [token]);
 
   const handleLogin = () => {
     try {
