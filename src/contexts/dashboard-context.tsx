@@ -1,6 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { getAllUsers } from '@/lib/data-adapter';
 import type { AppUser, AttendanceLog, Team } from '@/types';
 
 interface DayStats {
@@ -44,6 +45,28 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // 初期データの取得
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setIsLoading(true);
+        console.log('DashboardProvider: Loading initial data...');
+        
+        // ユーザーデータを取得
+        const users = await getAllUsers();
+        console.log('DashboardProvider: Users loaded:', users.length);
+        setAllUsers(users);
+        
+      } catch (error) {
+        console.error('DashboardProvider: Failed to load initial data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadInitialData();
+  }, []);
 
   const clearCache = useCallback(() => {
     setMonthlyCache({});

@@ -1148,6 +1148,149 @@ export const getAllUsers = async (): Promise<AppUser[]> => {
   }
 };
 
+// 特定ユーザーの出席記録を取得
+export const getUserAttendanceRecords = async (uid: string, days: number = 30): Promise<any[]> => {
+  try {
+    // 過去N日分の日付範囲を計算
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - days);
+
+    // 出勤ログを取得
+    const attendanceLogsRef = collection(db, 'attendance_logs');
+    const q = query(
+      attendanceLogsRef,
+      where('uid', '==', uid),
+      orderBy('timestamp', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    const logs = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    // 日付別に出席記録を整理
+    const attendanceByDate: { [date: string]: { checkIn?: Date, checkOut?: Date } } = {};
+    
+    logs.forEach((log: any) => {
+      const timestamp = safeTimestampToDate(log.timestamp);
+      if (timestamp && timestamp >= startDate) {
+        const dateStr = timestamp.toISOString().split('T')[0];
+        
+        if (!attendanceByDate[dateStr]) {
+          attendanceByDate[dateStr] = {};
+        }
+        
+        if (log.type === 'entry') {
+          attendanceByDate[dateStr].checkIn = timestamp;
+        } else if (log.type === 'exit') {
+          attendanceByDate[dateStr].checkOut = timestamp;
+        }
+      }
+    });
+
+    // 出席記録配列に変換
+    const attendanceRecords = Object.entries(attendanceByDate).map(([date, record]) => ({
+      date,
+      checkInTime: record.checkIn?.toISOString(),
+      checkOutTime: record.checkOut?.toISOString()
+    }));
+
+    return attendanceRecords.sort((a, b) => b.date.localeCompare(a.date));
+  } catch (error) {
+    console.error('出席記録取得エラー:', error);
+    // インデックスエラーの場合は空の配列を返す
+    if (error instanceof Error && error.message.includes('index')) {
+      console.warn('インデックス未作成のため、出席記録を取得できません。Firebaseコンソールでインデックスを作成してください。');
+    }
+    return [];
+  }
+};
+
+// 今日の全体出席状況を取得（旧プロジェクト方式）
+export const getTodayAttendanceStats = async (): Promise<any> => {
+  try {
+    // 今日の日付を取得（日本時間）
+    const currentDate = new Date();
+    const jstNow = new Date(currentDate.getTime() + (9 * 60 * 60 * 1000));
+    const today = jstNow.toISOString().split('T')[0];
+    const todayStart = new Date(today);
+    const todayEnd = new Date(today);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+    
+    // 全ユーザーを取得
+    const allUsers = await getAllUsers();
+    console.log('getTodayAttendanceStats: 全ユーザー数:', allUsers.length);
+    
+    if (allUsers.length === 0) {
+      return {
+        date: today,
+        totalUsers: 0,
+        presentUsers: 0,
+        statsByGrade: {}
+      };
+    }
+    
+    // 今日の出勤ログを取得
+    const logsRef = collection(db, 'attendance_logs');
+    const logsSnapshot = await getDocs(logsRef);
+    console.log('getTodayAttendanceStats: 総ログ数:', logsSnapshot.docs.length);
+    
+    // 今日の出勤者を特定
+    const todayAttendees = new Set<string>();
+    let todayLogsCount = 0;
+    
+    logsSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const timestamp = safeTimestampToDate(data.timestamp);
+      
+      if (timestamp && timestamp >= todayStart && timestamp < todayEnd) {
+        todayLogsCount++;
+        if (data.type === 'entry') {
+          todayAttendees.add(data.uid);
+          console.log('getTodayAttendanceStats: 今日の出勤:', data.uid, timestamp.toLocaleString('ja-JP'));
+        }
+      }
+    });
+    
+    console.log('getTodayAttendanceStats: 今日のログ数:', todayLogsCount);
+    console.log('getTodayAttendanceStats: 今日の出勤者数:', todayAttendees.size);
+    
+    // 学年別統計を作成
+    const statsByGrade: { [grade: number]: { total: number, present: number, users: AppUser[] } } = {};
+    
+    allUsers.forEach(user => {
+      const grade = user.grade;
+      if (!statsByGrade[grade]) {
+        statsByGrade[grade] = { total: 0, present: 0, users: [] };
+      }
+      
+      statsByGrade[grade].total++;
+      statsByGrade[grade].users.push(user);
+      
+      if (todayAttendees.has(user.uid)) {
+        statsByGrade[grade].present++;
+      }
+    });
+    
+    return {
+      date: today,
+      totalUsers: allUsers.length,
+      presentUsers: todayAttendees.size,
+      statsByGrade
+    };
+  } catch (error) {
+    console.error('今日の出席統計取得エラー:', error);
+    return {
+      date: new Date().toISOString().split('T')[0],
+      totalUsers: 0,
+      presentUsers: 0,
+      statsByGrade: {}
+    };
+  }
+};
+
 // ユーザー情報を更新（管理者専用）
 export const updateUser = async (uid: string, updates: Partial<AppUser>): Promise<boolean> => {
   try {
@@ -1564,5 +1707,108 @@ export const createAttendanceLogLegacyFormat = async (
   } catch (error) {
     console.error('出勤記録作成エラー:', error);
     return false;
+  }
+};
+
+// デバッグ用：出席ログの確認（改良版）
+export const debugAttendanceLogs = async (): Promise<void> => {
+  try {
+    console.log('=== 出席ログデバッグ開始 ===');
+    
+    const logsRef = collection(db, 'attendance_logs');
+    const snapshot = await getDocs(logsRef);
+    
+    console.log(`総ログ数: ${snapshot.docs.length}`);
+    
+    // 今日の日付を取得（日本時間）
+    const currentDate = new Date();
+    const jstNow = new Date(currentDate.getTime() + (9 * 60 * 60 * 1000));
+    const today = jstNow.toISOString().split('T')[0];
+    const todayStart = new Date(today);
+    const todayEnd = new Date(today);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+    
+    let todayCount = 0;
+    let recentLogs: any[] = [];
+    
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const timestamp = safeTimestampToDate(data.timestamp);
+      
+      if (timestamp) {
+        // 今日のログをチェック
+        if (timestamp >= todayStart && timestamp < todayEnd) {
+          todayCount++;
+          console.log(`今日のログ:`, {
+            uid: data.uid,
+            type: data.type,
+            time: timestamp.toLocaleString('ja-JP')
+          });
+        }
+        
+        // 最近7日間のログを収集
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        if (timestamp >= sevenDaysAgo) {
+          recentLogs.push({
+            date: timestamp.toISOString().split('T')[0],
+            time: timestamp.toLocaleString('ja-JP'),
+            uid: data.uid,
+            type: data.type
+          });
+        }
+      }
+    });
+    
+    console.log(`今日のログ数: ${todayCount}`);
+    console.log(`過去7日間のログ数: ${recentLogs.length}`);
+    
+    if (recentLogs.length > 0) {
+      console.log('最近のログサンプル（最新5件）:');
+      recentLogs
+        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+        .slice(0, 5)
+        .forEach(log => console.log(log));
+    }
+    
+    console.log('=== 出席ログデバッグ終了 ===');
+  } catch (error) {
+    console.error('デバッグエラー:', error);
+  }
+};
+
+// テスト用：今日の出席ログを作成
+export const createTodayTestAttendanceLogs = async (): Promise<void> => {
+  try {
+    console.log('=== 今日のテスト出席ログ作成開始 ===');
+    
+    // 数名のユーザーの今日の出勤ログを作成
+    const allUsers = await getAllUsers();
+    if (allUsers.length === 0) {
+      console.log('ユーザーが見つかりません');
+      return;
+    }
+    
+    // 最初の5名のユーザーに今日の出勤ログを作成
+    const testUsers = allUsers.slice(0, Math.min(5, allUsers.length));
+    const today = new Date();
+    
+    for (const user of testUsers) {
+      // 今日の9:00頃の出勤ログを作成
+      const entryTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, Math.floor(Math.random() * 60));
+      
+      await addDoc(collection(db, 'attendance_logs'), {
+        uid: user.uid,
+        cardId: user.cardId || 'test-card',
+        type: 'entry',
+        timestamp: entryTime
+      });
+      
+      console.log(`テスト出勤ログ作成: ${user.lastname} ${user.firstname} (${entryTime.toLocaleString('ja-JP')})`);
+    }
+    
+    console.log('=== 今日のテスト出席ログ作成完了 ===');
+  } catch (error) {
+    console.error('テスト出席ログ作成エラー:', error);
   }
 };
