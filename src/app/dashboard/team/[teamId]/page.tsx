@@ -46,7 +46,7 @@ export default function TeamStatsPage() {
           return;
         }
 
-        // 今日の出席状況を取得
+        // 今日の出勤状況を取得
         const todayStats = await getDailyAttendanceStatsV2(new Date());
         setTodayStatsData(todayStats);
 
@@ -123,7 +123,7 @@ export default function TeamStatsPage() {
             {teamStats.grade} 班統計
           </h1>
           <p className="text-gray-600 mt-1">
-            班全体の出席状況と統計情報
+            班全体の出勤状況と統計情報
           </p>
         </div>
       </div>
@@ -143,20 +143,20 @@ export default function TeamStatsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">今日の出席</CardTitle>
+            <CardTitle className="text-sm font-medium">今日の出勤</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{teamStats.presentToday}人</div>
             <p className="text-xs text-muted-foreground">
-              出席率: {Math.round((teamStats.presentToday / teamStats.totalMembers) * 100)}%
+              出勤率: {teamStats.totalMembers > 0 ? Math.round((teamStats.presentToday / teamStats.totalMembers) * 100) : 0}%
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">月間平均出席率</CardTitle>
+            <CardTitle className="text-sm font-medium">月間平均出勤率</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -177,7 +177,7 @@ export default function TeamStatsPage() {
         <CardContent>
           <div className="space-y-3">
             {teamStats.members.map((member) => {
-              // 今日の統計から実際の出席状況を確認
+              // 今日の統計から実際の出勤状況を確認
               let isPresent = false;
               const teamStat = todayStatsData?.find((t: any) => t.teamId === member.teamId);
               if (teamStat) {
@@ -211,7 +211,7 @@ export default function TeamStatsPage() {
                   </div>
                   <div className="flex items-center space-x-2">
                     <Badge variant={isPresent ? "default" : "outline"}>
-                      {isPresent ? '出席' : '未出席'}
+                      {isPresent ? '出勤中' : '退勤'}
                     </Badge>
                     {checkInTime && (
                       <div className="flex items-center text-xs text-gray-500">

@@ -149,7 +149,7 @@ export default function MemberStatsPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">出席率</CardTitle>
+            <CardTitle className="text-sm font-medium">出勤率</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -160,7 +160,7 @@ export default function MemberStatsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">出席日数</CardTitle>
+            <CardTitle className="text-sm font-medium">出勤日数</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -192,20 +192,20 @@ export default function MemberStatsPage() {
         </Card>
       </div>
 
-      {/* 最近の出席記録 */}
+      {/* 最近の出勤記録 */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center">
             <Calendar className="h-5 w-5 mr-2" />
-            最近の出席記録
+            最近の出勤記録
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {/* 実際の出席記録を表示 */}
+            {/* 実際の出勤記録を表示 */}
             {memberStats.recentAttendance.length === 0 ? (
               <div className="text-center py-4 text-gray-500">
-                出席記録がありません
+                出勤記録がありません
               </div>
             ) : (
               memberStats.recentAttendance.map((record: any, index: number) => {
@@ -230,7 +230,7 @@ export default function MemberStatsPage() {
                     <div className="flex items-center space-x-2">
                       {isPresent ? (
                         <>
-                          <Badge variant="default">出席</Badge>
+                          <Badge variant="default">出勤</Badge>
                           <div className="flex items-center text-xs text-gray-500">
                             <Clock className="h-3 w-3 mr-1" />
                             {new Date(record.checkInTime).toLocaleTimeString('ja-JP', {
@@ -249,7 +249,7 @@ export default function MemberStatsPage() {
                           )}
                         </>
                       ) : (
-                        <Badge variant="outline">未出席</Badge>
+                        <Badge variant="outline">未出勤</Badge>
                       )}
                     </div>
                   </div>
