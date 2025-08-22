@@ -17,7 +17,7 @@ import {
   LogOut,
   Shield,
 } from 'lucide-react';
-import { getDailyAttendanceStatsV2, getAllTeams, formatKisei } from '@/lib/data-adapter';
+import { getAllTeams, formatKisei } from '@/lib/data-adapter';
 import type { AppUser, Team } from '@/types';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
@@ -54,7 +54,6 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
   const router = useRouter();
   const [teams, setTeams] = useState<TeamData[]>([]);
   const [teamDefinitions, setTeamDefinitions] = useState<Team[]>([]);
-  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const isAdmin = user?.role === 'admin';
@@ -69,11 +68,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
 
       try {
         setLoading(true);
-        const [todayStats, fetchedTeams] = await Promise.all([
-          getDailyAttendanceStatsV2(new Date()),
-          getAllTeams(),
-        ]);
-        
+        const fetchedTeams = await getAllTeams();
         setTeamDefinitions(fetchedTeams);
         const teamNameMap = fetchedTeams.reduce((acc, team) => {
             acc[team.id] = team.name;
@@ -100,17 +95,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
             };
           }
           
-          let isPresent = false;
-          const teamStat = todayStats.find(stat => stat.teamId === teamId);
-           if(teamStat) {
-            const gradeStat = teamStat.gradeStats.find(gs => gs.grade === member.grade);
-            if(gradeStat){
-                const userInStats = gradeStat.users.find((u:any) => u.uid === member.uid);
-                if (userInStats) {
-                    isPresent = userInStats.isPresent;
-                }
-            }
-          }
+          const isPresent = member.status === 'active';
           
           acc[teamId].members.push({
             ...member,

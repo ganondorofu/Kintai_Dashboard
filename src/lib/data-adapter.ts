@@ -1,7 +1,4 @@
 
-
-
-
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
@@ -120,11 +117,34 @@ export const getAllUsers = async (): Promise<AppUser[]> => {
   try {
     const usersRef = collection(db, 'users');
     const snapshot = await getDocs(usersRef);
-    
-    return snapshot.docs.map(doc => ({
+    const users = snapshot.docs.map(doc => ({
       uid: doc.id,
       ...doc.data()
     } as AppUser));
+
+    // 各ユーザーの最新の勤怠ステータスを取得
+    const userStatusPromises = users.map(async (user) => {
+      const q = query(
+        collection(db, 'attendances', getAttendancePath(new Date()).fullPath.replace(/\//g, '-'), 'logs'),
+        where('uid', '==', user.uid),
+        orderBy('timestamp', 'desc'),
+        limit(1)
+      );
+      const logSnapshot = await getDocs(q);
+
+      if (!logSnapshot.empty) {
+        const lastLog = logSnapshot.docs[0].data() as AttendanceLog;
+        return {
+          ...user,
+          status: lastLog.type === 'entry' ? 'active' : 'inactive',
+          last_activity: lastLog.timestamp,
+        };
+      }
+      return { ...user, status: 'inactive' };
+    });
+
+    return Promise.all(userStatusPromises);
+
   } catch (error) {
     console.error('全ユーザー取得エラー:', error);
     return [];
@@ -1473,7 +1493,7 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
 
     // ユーザーの現在の勤怠ステータスを確認
     const currentStatus = userData.status || 'inactive'; // 'active' or 'inactive'
-    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'exit';
     const logType: 'entry' | 'exit' = newStatus === 'active' ? 'entry' : 'exit';
 
     const batch = writeBatch(db);
