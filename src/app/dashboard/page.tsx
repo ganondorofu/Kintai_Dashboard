@@ -1,7 +1,6 @@
 'use client';
 
 import { useAuth } from '@/components/firebase-auth-provider';
-import AdminDashboard from '@/components/dashboard/admin-dashboard';
 import UserDashboard from '@/components/dashboard/user-dashboard';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -34,7 +33,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      {appUser.role === 'admin' ? <AdminDashboard /> : <UserDashboard user={appUser} />}
+      <UserDashboard user={appUser} />
     </>
   );
 }

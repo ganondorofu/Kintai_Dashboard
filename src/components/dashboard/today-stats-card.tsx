@@ -2,18 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useDashboard } from '@/contexts/dashboard-context';
-import type { AttendanceLog } from '@/types';
+import { convertGradeToDisplay } from '@/lib/attendance-utils';
+import { getTodayAttendanceStats } from '@/lib/data-adapter';
 
 interface TodayStatsCardProps {
   className?: string;
 }
 
 export const TodayStatsCard: React.FC<TodayStatsCardProps> = ({ className }) => {
-  const { todayStats, userProfile } = useDashboard();
+  const { allUsers } = useDashboard();
   const [greeting, setGreeting] = useState<string>('');
+  const [todayStats, setTodayStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   // 時間帯による挨拶
   useEffect(() => {
@@ -29,83 +31,101 @@ export const TodayStatsCard: React.FC<TodayStatsCardProps> = ({ className }) => 
     }
   }, []);
 
-  const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit'
+  // 実際の出席データを取得
+  useEffect(() => {
+    const fetchTodayStats = async () => {
+      try {
+        setLoading(true);
+        const stats = await getTodayAttendanceStats();
+        setTodayStats(stats);
+        console.log('TodayStatsCard: Real stats loaded:', stats);
+      } catch (error) {
+        console.error('TodayStatsCard: Failed to load stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTodayStats();
+  }, []);
+
+  // 統計データを整理
+  const formatTodayStats = () => {
+    if (loading || !todayStats) {
+      return { totalPresent: 0, totalUsers: allUsers?.length || 0, teamStats: [] };
+    }
+
+    const teams = Object.entries(todayStats.statsByGrade).map(([grade, stats]: [string, any]) => {
+      const gradeNumber = parseInt(grade);
+      const gradeDisplay = convertGradeToDisplay(gradeNumber);
+      
+      return {
+        teamName: gradeDisplay,
+        grade: gradeDisplay,
+        present: stats.present,
+        total: stats.total
+      };
     });
+
+    return {
+      totalPresent: todayStats.presentUsers,
+      totalUsers: todayStats.totalUsers,
+      teamStats: teams
+    };
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'entry': return 'bg-blue-100 text-blue-800';
-      case 'exit': return 'bg-red-100 text-red-800';
-      case 'break_start': return 'bg-yellow-100 text-yellow-800';
-      case 'break_end': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'entry': return '出勤';
-      case 'exit': return '退勤';
-      case 'break_start': return '休憩開始';
-      case 'break_end': return '休憩終了';
-      default: return status;
-    }
-  };
+  const { totalPresent, totalUsers, teamStats } = formatTodayStats();
 
   return (
     <Card className={className}>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>本日の出勤状況</span>
+          <span>本日の出席状況</span>
           <div className="text-sm font-normal text-gray-600">
             {greeting}
-            {userProfile && `, ${userProfile.lastname}さん`}
           </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {/* 今日の記録 */}
-          {todayStats && todayStats.logs.length > 0 ? (
+          {/* 全体統計 */}
+          <div className="text-center">
+            <div className="text-3xl font-bold text-blue-600">
+              {totalPresent}/{totalUsers}
+            </div>
+            <div className="text-sm text-gray-500">出席者数</div>
+          </div>
+
+          {/* 班別統計 */}
+          {teamStats.length > 0 ? (
             <div className="space-y-3">
-              <div className="text-sm font-medium text-gray-700">
-                本日の記録 ({todayStats.logs.length}件)
-              </div>
+              <div className="text-sm font-medium text-gray-700">班別出席状況</div>
               <div className="space-y-2">
-                {todayStats.logs.map((log, index) => (
+                {teamStats.map((team, index) => (
                   <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                    <span className="text-sm font-medium">{team.grade}</span>
                     <div className="flex items-center space-x-2">
-                      <Badge className={getStatusColor(log.status)}>
-                        {getStatusText(log.status)}
-                      </Badge>
                       <span className="text-sm text-gray-600">
-                        {formatTime(log.timestamp)}
+                        {team.present}/{team.total}
                       </span>
+                      <Badge 
+                        variant={team.present === team.total ? "default" : team.present > team.total * 0.8 ? "secondary" : "destructive"}
+                        className="text-xs"
+                      >
+                        {team.total > 0 ? Math.round((team.present / team.total) * 100) : 0}%
+                      </Badge>
                     </div>
                   </div>
                 ))}
               </div>
-              
-              {/* 勤務時間計算 */}
-              {todayStats.workingMinutes > 0 && (
-                <div className="pt-2 border-t">
-                  <div className="text-sm text-gray-600">
-                    本日の勤務時間: {Math.floor(todayStats.workingMinutes / 60)}時間{todayStats.workingMinutes % 60}分
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
             <div className="text-center py-4 text-gray-500">
-              本日の出勤記録はありません
+              本日の出席データはありません
             </div>
           )}
 
-          {/* クイックアクション */}
+          {/* フッター */}
           <div className="pt-2 border-t">
             <div className="text-xs text-gray-400">
               出勤・退勤の記録は<strong>キオスク</strong>ページで行えます
