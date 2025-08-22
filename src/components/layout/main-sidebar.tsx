@@ -16,7 +16,8 @@ import {
   Users,
   LogOut
 } from 'lucide-react';
-import { getDailyAttendanceStatsV2 } from '@/lib/data-adapter';
+import { getDailyAttendanceStatsV2, getAllTeams } from '@/lib/data-adapter';
+import type { AppUser, Team } from '@/types';
 
 interface TeamMember {
   uid: string;
@@ -33,7 +34,6 @@ interface TeamMember {
 interface TeamData {
   teamId: string;
   teamName: string;
-  grade: string;
   members: any[];
   presentCount: number;
   totalCount: number;
@@ -49,20 +49,11 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [teams, setTeams] = useState<TeamData[]>([]);
+  const [teamDefinitions, setTeamDefinitions] = useState<Team[]>([]);
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   const isAdmin = user?.role === 'admin';
-
-  // 学年変換関数
-  const convertGradeToString = (grade: number) => {
-      return `${grade}期生`;
-  };
-
-  // メインナビゲーション
-  const navigation = [
-    { name: '個人ダッシュボード', href: '/dashboard', icon: Home, current: pathname === '/dashboard' },
-  ];
 
   // 班データの構築
   useEffect(() => {
@@ -74,34 +65,40 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
 
       try {
         setLoading(true);
-        const todayStats = await getDailyAttendanceStatsV2(new Date());
-        
-        const currentUserGrade = user?.grade;
+        const [todayStats, fetchedTeams] = await Promise.all([
+          getDailyAttendanceStatsV2(new Date()),
+          getAllTeams(),
+        ]);
+
+        setTeamDefinitions(fetchedTeams);
+        const teamNameMap = fetchedTeams.reduce((acc, team) => {
+            acc[team.id] = team.name;
+            return acc;
+        }, {} as Record<string, string>);
+
+        const currentUserTeamId = user?.teamId;
         
         // 班ごとにユーザーをグループ化
         const teamGroups = allUsers.reduce((acc, member) => {
-          const teamId = convertGradeToString(member.grade);
+          const teamId = member.teamId || 'unassigned';
           
-          // 一般ユーザーの場合、自分の学年のみ表示
-          if (!isAdmin && member.grade !== currentUserGrade) {
+          if (!isAdmin && teamId !== currentUserTeamId) {
             return acc;
           }
           
           if (!acc[teamId]) {
             acc[teamId] = {
               teamId,
-              teamName: teamId,
-              grade: teamId,
+              teamName: teamNameMap[teamId] || `班: ${teamId}`,
               members: [],
               presentCount: 0,
               totalCount: 0
             };
           }
 
-          // 今日の出勤状況を確認
           let isPresent = false;
-          const teamStat = todayStats.find(stat => stat.teamName === teamId);
-          if(teamStat) {
+          const teamStat = todayStats.find(stat => stat.teamId === teamId);
+           if(teamStat) {
             const gradeStat = teamStat.gradeStats.find(gs => gs.grade === member.grade);
             if(gradeStat){
                 const userInStats = gradeStat.users.find(u => u.uid === member.uid);
@@ -124,7 +121,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
         }, {} as Record<string, TeamData>);
 
         const sortedTeams = Object.values(teamGroups).sort((a, b) => 
-          a.grade.localeCompare(b.grade, undefined, { numeric: true })
+          a.teamName.localeCompare(b.teamName)
         );
 
         setTeams(sortedTeams);
@@ -179,21 +176,18 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
       {/* ナビゲーション */}
       <div className="flex-1 overflow-y-auto">
         <nav className="px-2 py-4 space-y-1">
-          {navigation.map((item) => (
-            <Link
-              key={item.name}
-              href={item.href}
-              onClick={onClose}
-              className={`group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                item.current
-                  ? 'bg-blue-50 text-blue-600 border border-blue-200'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
-              {item.name}
-            </Link>
-          ))}
+          <Link
+            href="/dashboard"
+            onClick={onClose}
+            className={`group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              pathname === '/dashboard'
+                ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+            }`}
+          >
+            <Home className="mr-3 h-5 w-5 flex-shrink-0" />
+            個人ダッシュボード
+          </Link>
         </nav>
 
         {/* 班一覧 */}
@@ -215,7 +209,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
                     <div className="flex items-center">
                       <Users className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span className="text-left truncate font-medium">
-                        {team.grade}
+                        {team.teamName}
                       </span>
                     </div>
                     <div className="flex items-center space-x-2">
