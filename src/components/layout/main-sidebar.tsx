@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -68,13 +69,6 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
         
         // デバッグ用：出席ログをチェック
         await debugAttendanceLogs();
-        
-        // テスト用：今日の出席ログがない場合は作成（一度だけ実行）
-        const shouldCreateTestData = localStorage.getItem('testAttendanceCreated') !== new Date().toDateString();
-        if (shouldCreateTestData) {
-          await createTodayTestAttendanceLogs();
-          localStorage.setItem('testAttendanceCreated', new Date().toDateString());
-        }
         
         const todayStats = await getTodayAttendanceStats();
         console.log('MainSidebar: Today stats received:', todayStats);

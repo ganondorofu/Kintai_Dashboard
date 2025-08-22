@@ -1,3 +1,4 @@
+
 'use client';
 
 import { AttendanceCalendar } from './attendance-calendar';
@@ -5,12 +6,19 @@ import { TodayStatsCard } from './today-stats-card';
 import { UserInfoCard } from './user-info-card';
 import { CurrentTimeDisplay } from './current-time-display';
 import type { AppUser } from '@/types';
+import { useDashboard } from '@/contexts/dashboard-context';
 
 interface UserDashboardProps {
   user: AppUser;
 }
 
 export default function UserDashboard({ user }: UserDashboardProps) {
+  const { allUsers, isLoading } = useDashboard();
+
+  if (isLoading) {
+    return <div className="p-6">読み込み中...</div>;
+  }
+  
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">

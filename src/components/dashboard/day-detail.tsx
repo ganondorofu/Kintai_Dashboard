@@ -1,9 +1,11 @@
+
 'use client';
 
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { convertPeriodToGrade, convertGradeToDisplay } from '@/lib/attendance-utils';
 import type { DayStats } from '@/hooks/use-attendance-data';
+import type { AppUser } from '@/types';
 
 interface DayDetailProps {
   selectedDate: Date;

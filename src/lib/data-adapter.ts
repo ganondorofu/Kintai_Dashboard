@@ -1,3 +1,4 @@
+
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
@@ -305,75 +306,6 @@ export const integrateFirebaseUser = async (firebaseUser: FirebaseUser): Promise
   }
 };
 
-// GitHub OAuthユーザーを既存のAppUserに変換/統合（既存のOAuth実装用に保持）
-export const integrateGitHubUser = async (githubUser: GitHubUser): Promise<AppUser | null> => {
-  try {
-    // まず GitHub アカウント名で既存ユーザーを検索
-    const existingUser = await findUserByGitHub(githubUser.login);
-    
-    if (existingUser) {
-      // 既存のユーザーが見つかった場合は、OAuth情報を更新
-      // 重要：既存のFirebase Auth UIDをそのまま使用
-      const userRef = doc(db, 'users', existingUser.uid);  // 既存のUID
-      const updatedUser: AppUser = {
-        ...existingUser,
-        githubLogin: githubUser.login,
-        githubId: githubUser.id,
-        name: githubUser.name,
-        avatarUrl: githubUser.avatar_url,
-        oauthProvider: 'github',
-        lastLoginAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
-      
-      await updateDoc(userRef, {
-        githubLogin: githubUser.login,
-        githubId: githubUser.id,
-        name: githubUser.name,
-        avatarUrl: githubUser.avatar_url,
-        oauthProvider: 'github',
-        lastLoginAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      
-      return updatedUser;
-    } else {
-      // 新規ユーザーの場合は新しいUID形式を使用
-      // 注意：新規ユーザーはFirebase Auth UIDではなく、独自のUID形式を使用
-      const newUid = `oauth_${githubUser.id}_${Date.now()}`;  // 既存と重複しない形式
-      const userRef = doc(db, 'users', newUid);
-      
-      const newUser: AppUser = {
-        uid: newUid,
-        github: githubUser.login,
-        githubLogin: githubUser.login,
-        githubId: githubUser.id,
-        name: githubUser.name,
-        avatarUrl: githubUser.avatar_url,
-        firstname: githubUser.name?.split(' ')[0] || githubUser.login,
-        lastname: githubUser.name?.split(' ').slice(1).join(' ') || '',
-        grade: 1, // デフォルト値
-        oauthProvider: 'github',
-        createdAt: Timestamp.now(),
-        lastLoginAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
-      
-      await setDoc(userRef, {
-        ...newUser,
-        createdAt: serverTimestamp(),
-        lastLoginAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      
-      return newUser;
-    }
-  } catch (error) {
-    console.error('GitHubユーザー統合エラー:', error);
-    return null;
-  }
-};
-
 // 出勤記録を作成（新しいデータ構造）
 export const createAttendanceLogV2 = async (
   uid: string, 
@@ -401,7 +333,7 @@ export const createAttendanceLogV2WithId = async (
     const now = new Date();
     const { year, month, day } = getAttendancePath(now);
     
-    // 新しい階層構造に保存: /attendances/{年月日}/{logId}
+    // 新しい階層構造に保存: /attendances/{年月日}/logs/{logId}
     // 旧構造と同じIDを使用
     const dateKey = `${year}-${month}-${day}`;
     const logRef = doc(db, 'attendances', dateKey, 'logs', logId);
@@ -426,168 +358,6 @@ export const createAttendanceLogV2WithId = async (
   }
 };
 
-// 出勤記録を作成（従来版：移行期間中は両方に保存）
-export const createAttendanceLog = async (
-  uid: string, 
-  type: 'entry' | 'exit',
-  cardId?: string
-): Promise<boolean> => {
-  try {
-    // 旧構造と同じID生成規則を使用
-    const logId = `${uid}_${Date.now()}`;
-    const logRef = doc(db, 'attendance_logs', logId);
-    
-    const logData: Omit<AttendanceLog, 'id'> = {
-      uid,
-      type,
-      timestamp: Timestamp.now(),
-      cardId: cardId || ''
-    };
-    
-    await setDoc(logRef, {
-      ...logData,
-      timestamp: serverTimestamp()
-    });
-
-    // 新しい構造にも同じIDで同時保存（移行期間中）
-    await createAttendanceLogV2WithId(uid, type, cardId, logId);
-    
-    return true;
-  } catch (error) {
-    console.error('出席ログ作成エラー:', error);
-    return false;
-  }
-};
-
-// ユーザーが既存のチームに所属しているかチェック（UID形式に対応）
-export const getUserWithTeamInfo = async (uid: string): Promise<AppUser | null> => {
-  try {
-    // 直接UIDで検索
-    let userRef = doc(db, 'users', uid);
-    let userSnapshot = await getDoc(userRef);
-    
-    if (userSnapshot.exists()) {
-      return {
-        uid: userSnapshot.id,
-        ...userSnapshot.data() as Omit<AppUser, 'uid'>
-      } as AppUser;
-    }
-    
-    // GitHub IDベースのUIDで検索（新形式）
-    if (!uid.startsWith('github_')) {
-      const githubUid = `github_${uid}`;
-      userRef = doc(db, 'users', githubUid);
-      userSnapshot = await getDoc(userRef);
-      
-      if (userSnapshot.exists()) {
-        return {
-          uid: userSnapshot.id,
-          ...userSnapshot.data() as Omit<AppUser, 'uid'>
-        } as AppUser;
-      }
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('チーム情報付きユーザー取得エラー:', error);
-    return null;
-  }
-};
-
-// 既存システム互換：トークンベースのカード連携機能
-export const createLinkRequest = async (token: string): Promise<boolean> => {
-  try {
-    await addDoc(collection(db, 'link_requests'), {
-      token,
-      status: 'waiting',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    return true;
-  } catch (error) {
-    console.error('リンクリクエスト作成エラー:', error);
-    return false;
-  }
-};
-
-// トークンの状態を監視（QRコード連携用）
-export const watchTokenStatus = (
-  token: string, 
-  callback: (status: string, data?: LinkRequest) => void
-): (() => void) => {
-  const q = query(
-    collection(db, 'link_requests'),
-    where('token', '==', token)
-  );
-  
-  return onSnapshot(q, (snapshot) => {
-    snapshot.docChanges().forEach((change) => {
-      const data = change.doc.data() as LinkRequest;
-      if (data.token === token) {
-        callback(data.status, data);
-      }
-    });
-  }, (error) => {
-    console.error('トークン状態監視エラー:', error);
-  });
-};
-
-// OAuth認証後にトークンと連携
-export const linkTokenWithUser = async (token: string, user: GitHubUser): Promise<boolean> => {
-  try {
-    const q = query(
-      collection(db, 'link_requests'),
-      where('token', '==', token),
-      where('status', '==', 'waiting')
-    );
-    
-    // トークンドキュメントを更新
-    // 実際の実装では、ドキュメントIDを特定して更新する必要があります
-    // 簡略化のため、ここでは概念的な実装を示します
-    
-    return true;
-  } catch (error) {
-    console.error('トークンとユーザーの紐づけエラー:', error);
-    return false;
-  }
-};
-
-// 移行用: Firebase Auth UID から GitHub ベース UID への変換
-export const migrateUserUid = async (firebaseUid: string, githubId: number): Promise<boolean> => {
-  try {
-    const oldUserRef = doc(db, 'users', firebaseUid);
-    const oldUserSnapshot = await getDoc(oldUserRef);
-    
-    if (!oldUserSnapshot.exists()) {
-      console.warn(`User with Firebase UID ${firebaseUid} not found`);
-      return false;
-    }
-    
-    const userData = oldUserSnapshot.data() as AppUser;
-    const newUid = `github_${githubId}`;
-    const newUserRef = doc(db, 'users', newUid);
-    
-    // 新しいUIDでユーザーデータを保存
-    await setDoc(newUserRef, {
-      ...userData,
-      uid: newUid,
-      firebaseUid: firebaseUid, // 元のUID参照を保持
-      githubId: githubId,
-      updatedAt: serverTimestamp()
-    });
-    
-    // 出勤ログのUIDも更新（必要に応じて）
-    // 注意: 大量のデータがある場合は、バッチ処理で行う
-    
-    console.log(`Migrated user from ${firebaseUid} to ${newUid}`);
-    return true;
-  } catch (error) {
-    console.error('ユーザーUID移行エラー:', error);
-    return false;
-  }
-};
-
-// 勤怠管理機能
 // ユーザーの勤怠記録を取得（新しいデータ構造）
 export const getUserAttendanceLogsV2 = async (
   uid: string, 
@@ -681,108 +451,6 @@ export const getUserAttendanceLogs = async (
     } as AttendanceLog));
   } catch (error) {
     console.error('ユーザー勤怠ログ取得エラー:', error);
-    return [];
-  }
-};
-
-// チーム内のユーザー一覧を取得
-export const getTeamUsers = async (teamId: string): Promise<AppUser[]> => {
-  try {
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('teamId', '==', teamId));
-    const snapshot = await getDocs(q);
-    
-    return snapshot.docs.map(doc => ({
-      uid: doc.id,
-      ...doc.data()
-    } as AppUser));
-  } catch (error) {
-    console.error('チームユーザー取得エラー:', error);
-    return [];
-  }
-};
-
-// チームの勤怠記録を取得（管理者・チームリーダー用）
-export const getTeamAttendanceLogs = async (
-  teamId: string,
-  startDate?: Date,
-  endDate?: Date,
-  limitCount: number = 100
-): Promise<AttendanceLog[]> => {
-  try {
-    // まずチームのユーザーを取得
-    const teamUsers = await getTeamUsers(teamId);
-    const teamUids = teamUsers.map(user => user.uid);
-    
-    if (teamUids.length === 0) return [];
-
-    const logsRef = collection(db, 'attendance_logs');
-    let q = query(
-      logsRef,
-      where('uid', 'in', teamUids.slice(0, 10)), // Firestoreの制限で一度に10個まで
-      orderBy('timestamp', 'desc'),
-      limit(limitCount)
-    );
-
-    if (startDate && endDate) {
-      q = query(
-        logsRef,
-        where('uid', 'in', teamUids.slice(0, 10)),
-        where('timestamp', '>=', startDate),
-        where('timestamp', '<=', endDate),
-        orderBy('timestamp', 'desc')
-      );
-    }
-
-    const snapshot = await getDocs(q);
-    const logs = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as AttendanceLog));
-
-    // 10人以上の場合は追加のクエリが必要
-    if (teamUids.length > 10) {
-      const remainingBatches = Math.ceil((teamUids.length - 10) / 10);
-      for (let i = 1; i <= remainingBatches; i++) {
-        const batchUids = teamUids.slice(i * 10, (i + 1) * 10);
-        if (batchUids.length === 0) break;
-
-        let batchQuery = query(
-          logsRef,
-          where('uid', 'in', batchUids),
-          orderBy('timestamp', 'desc'),
-          limit(limitCount)
-        );
-
-        if (startDate && endDate) {
-          batchQuery = query(
-            logsRef,
-            where('uid', 'in', batchUids),
-            where('timestamp', '>=', startDate),
-            where('timestamp', '<=', endDate),
-            orderBy('timestamp', 'desc')
-          );
-        }
-
-        const batchSnapshot = await getDocs(batchQuery);
-        const batchLogs = batchSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as AttendanceLog));
-        
-        logs.push(...batchLogs);
-      }
-    }
-
-    // タイムスタンプで並び替え
-    return logs.sort((a, b) => {
-      const aTime = safeTimestampToDate(a.timestamp);
-      const bTime = safeTimestampToDate(b.timestamp);
-      if (!aTime || !bTime) return 0;
-      return bTime.getTime() - aTime.getTime();
-    });
-  } catch (error) {
-    console.error('チーム勤怠ログ取得エラー:', error);
     return [];
   }
 };
@@ -954,119 +622,6 @@ export const calculateMonthlyAttendanceStats = async (
   }
 };
 
-// 勤怠ログから日別出席統計を計算
-export const calculateDailyAttendanceFromLogs = async (
-  targetDate: Date
-): Promise<{
-  teamId: string;
-  teamName?: string;
-  gradeStats: { grade: number; count: number; users: AppUser[] }[];
-}[]> => {
-  try {
-    console.log(`📅 ${targetDate.toDateString()}の出席統計を勤怠ログから計算中...`);
-    
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    // 全ユーザーの勤怠ログを取得
-    const allLogs = await getAllAttendanceLogs();
-    console.log(`� 全勤怠ログ数: ${allLogs.length}`);
-    
-    // 指定日の出勤記録があるユーザーを特定
-    const dayEntryLogs = allLogs.filter(log => {
-      const logDate = safeTimestampToDate(log.timestamp);
-      if (!logDate) return false;
-      
-      return logDate >= startOfDay && 
-             logDate <= endOfDay && 
-             log.type === 'entry';
-    });
-    
-    console.log(`� ${targetDate.toDateString()}の出勤記録数: ${dayEntryLogs.length}`);
-    
-    // 出席したユーザーのUIDを取得（重複排除）
-    const attendedUids = [...new Set(dayEntryLogs.map(log => log.uid))];
-    console.log(`👥 出席ユーザー数: ${attendedUids.length}`);
-    
-    if (attendedUids.length === 0) {
-      console.log('❌ 出席記録なし');
-      return [];
-    }
-
-    // 全ユーザー情報を取得
-    const allUsers = await getAllUsers();
-    console.log(`👤 全ユーザー数: ${allUsers.length}`);
-    
-    // 出席したユーザーの情報を取得
-    const attendedUsers = allUsers.filter(user => attendedUids.includes(user.uid));
-    console.log(`✅ 出席ユーザー情報取得数: ${attendedUsers.length}`);
-
-    // 班ごとにグループ化
-    const teamGroups = attendedUsers.reduce((acc, user) => {
-      const teamId = user.teamId || 'unassigned';
-      if (!acc[teamId]) {
-        acc[teamId] = [];
-      }
-      acc[teamId].push(user);
-      return acc;
-    }, {} as Record<string, AppUser[]>);
-
-    console.log(`🏢 班数: ${Object.keys(teamGroups).length}`);
-
-    // 班情報を取得
-    const teams: Record<string, string> = {};
-    const teamIds = Object.keys(teamGroups).filter(id => id !== 'unassigned');
-    
-    if (teamIds.length > 0) {
-      const allTeams = await getAllTeams();
-      allTeams.forEach(team => {
-        teams[team.id] = team.name;
-      });
-    }
-
-    // 班別・学年別統計を生成
-    const result = Object.entries(teamGroups).map(([teamId, teamUsers]) => {
-      const gradeGroups = teamUsers.reduce((acc, user) => {
-        // user.gradeは期生として保存されているため、学年に変換
-        const kiseiNumber = user.grade || 10; // デフォルトは10期生（1年生）
-        const actualGrade = convertKiseiiToGrade(kiseiNumber);
-        
-        if (!acc[actualGrade]) {
-          acc[actualGrade] = [];
-        }
-        acc[actualGrade].push(user);
-        return acc;
-      }, {} as Record<number, AppUser[]>);
-
-      const gradeStats = Object.entries(gradeGroups).map(([grade, gradeUsers]) => ({
-        grade: parseInt(grade),
-        count: gradeUsers.length,
-        users: gradeUsers
-      })).sort((a, b) => a.grade - b.grade);
-
-      console.log(`🎯 班${teamId}: ${gradeStats.reduce((sum, g) => sum + g.count, 0)}人`);
-
-      return {
-        teamId,
-        teamName: teams[teamId] || `班${teamId}`,
-        gradeStats
-      };
-    });
-
-    console.log(`🎊 統計計算完了: 総出席者${result.reduce((total, team) => 
-      total + team.gradeStats.reduce((teamTotal, grade) => teamTotal + grade.count, 0), 0
-    )}人`);
-
-    return result;
-  } catch (error) {
-    console.error('勤怠ログからの日別出席統計計算エラー:', error);
-    return [];
-  }
-};
-
 // 特定日の班別・学年別出席人数を取得（新しいデータ構造）
 export const getDailyAttendanceStatsV2 = async (
   targetDate: Date
@@ -1114,22 +669,6 @@ export const getDailyAttendanceStats = async (
   gradeStats: { grade: number; count: number; users: AppUser[] }[];
 }[]> => {
   return calculateDailyAttendanceFromLogs(targetDate);
-};
-
-// チーム一覧を取得
-export const getAllTeams = async (): Promise<Team[]> => {
-  try {
-    const teamsRef = collection(db, 'teams');
-    const snapshot = await getDocs(teamsRef);
-    
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Team));
-  } catch (error) {
-    console.error('チーム一覧取得エラー:', error);
-    return [];
-  }
 };
 
 // 全ユーザー一覧を取得（管理者専用）
@@ -1810,5 +1349,58 @@ export const createTodayTestAttendanceLogs = async (): Promise<void> => {
     console.log('=== 今日のテスト出席ログ作成完了 ===');
   } catch (error) {
     console.error('テスト出席ログ作成エラー:', error);
+  }
+};
+
+// チーム一覧を取得
+export const getTeams = async (): Promise<Team[]> => {
+  try {
+    const teamsRef = collection(db, 'teams');
+    const snapshot = await getDocs(teamsRef);
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data() as Omit<Team, 'id'>
+    } as Team));
+  } catch (error) {
+    console.error('Error fetching teams:', error);
+    throw error;
+  }
+};
+
+// 特定チームの情報を取得
+export const getTeam = async (teamId: string): Promise<Team | null> => {
+  try {
+    const teamRef = doc(db, 'teams', teamId);
+    const snapshot = await getDoc(teamRef);
+    
+    if (snapshot.exists()) {
+      return {
+        id: snapshot.id,
+        ...snapshot.data() as Omit<Team, 'id'>
+      } as Team;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching team:', error);
+    throw error;
+  }
+};
+
+// チームメンバー一覧を取得
+export const getTeamMembers = async (teamId: string): Promise<AppUser[]> => {
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('teamId', '==', teamId));
+    const snapshot = await getDocs(q);
+    
+    return snapshot.docs.map(doc => ({
+      uid: doc.id,
+      ...doc.data() as Omit<AppUser, 'uid'>
+    } as AppUser));
+  } catch (error) {
+    console.error('Error fetching team members:', error);
+    throw error;
   }
 };
