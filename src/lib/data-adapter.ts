@@ -365,12 +365,11 @@ export const getUserAttendanceLogsV2 = async (
 ): Promise<AttendanceLog[]> => {
   try {
     const logs: AttendanceLog[] = [];
-    const effectiveStartDate = startDate || new Date(0); // If no start date, get all logs
-    const effectiveEndDate = endDate || new Date(); // If no end date, up to now
+    const effectiveStartDate = startDate || new Date(0); 
+    const effectiveEndDate = endDate || new Date(); 
 
     const yearMonths = getYearMonthsInRange(effectiveStartDate, effectiveEndDate);
       
-    // 降順で取得するため、年月を逆順に処理
     for (const { year, month } of yearMonths.reverse()) {
         const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
         const startDay = effectiveEndDate.getFullYear().toString() === year && 
@@ -382,8 +381,6 @@ export const getUserAttendanceLogsV2 = async (
                        ? effectiveStartDate.getDate() : 1;
 
         for (let day = startDay; day >= endDay; day--) {
-            if (logs.length >= limitCount) break;
-
             const dayStr = day.toString().padStart(2, '0');
             const dateKey = `${year}-${month}-${dayStr}`;
             const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
@@ -402,12 +399,11 @@ export const getUserAttendanceLogsV2 = async (
 
             logs.push(...dayLogs);
         }
-        if (logs.length >= limitCount) break;
     }
 
-    // 新しいログがない場合、古い構造から取得を試みる
-    if (logs.length === 0) {
-        return await getUserAttendanceLogs(uid, startDate, endDate, limitCount);
+    if (logs.length < limitCount) {
+        const oldLogs = await getUserAttendanceLogs(uid, startDate, endDate, limitCount - logs.length);
+        logs.push(...oldLogs);
     }
     
     return logs.sort((a,b) => b.timestamp.toMillis() - a.timestamp.toMillis()).slice(0, limitCount);
@@ -700,10 +696,6 @@ export const getDailyAttendanceStatsV2 = async (
       id: doc.id,
       ...doc.data()
     } as AttendanceLog));
-    
-    if (logs.length === 0) {
-       return [];
-    }
     
     return await calculateDailyAttendanceFromLogsData(logs, targetDate);
   } catch (error) {
@@ -1334,7 +1326,6 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
       if (!newLogSnapshot.empty) {
         lastLog = newLogSnapshot.docs[0].data() as AttendanceLog;
       } else {
-        // 新しい構造にない場合、古い構造もチェック（移行期間中のため）
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
         const oldLogsRef = collection(db, 'attendance_logs');
         const qOld = query(
@@ -1374,9 +1365,34 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
     return { success: successCount, noAction: noActionCount, failed: failureCount };
   } catch (error) {
     console.error('自動退勤処理中にエラーが発生しました:', error);
-    // 全件失敗として返す
     const userCount = (await getAllUsers()).length;
     return { success: 0, noAction: userCount - failureCount, failed: failureCount };
   }
 };
 
+export const getWorkdaysInRange = async (startDate: Date, endDate: Date): Promise<Date[]> => {
+    const workdaysRef = collection(db, 'workdays');
+    const q = query(
+        workdaysRef,
+        where('date', '>=', startDate.toISOString().split('T')[0]),
+        where('date', '<=', endDate.toISOString().split('T')[0])
+    );
+    const snapshot = await getDocs(q);
+    
+    // If workdays collection is used, return dates from it
+    if (!snapshot.empty) {
+        return snapshot.docs.map(doc => new Date(doc.data().date));
+    }
+    
+    // Fallback: Check attendance logs if workdays collection is not populated
+    const allLogs = await getAllAttendanceLogs(startDate, endDate, 5000); // Get more logs for this
+    const workdays = new Set<string>();
+    allLogs.forEach(log => {
+        const logDate = safeTimestampToDate(log.timestamp);
+        if (logDate) {
+            workdays.add(logDate.toISOString().split('T')[0]);
+        }
+    });
+
+    return Array.from(workdays).map(dateStr => new Date(dateStr));
+};

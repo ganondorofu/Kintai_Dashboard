@@ -7,8 +7,9 @@ import { ArrowLeft, Users, Calendar, Clock, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { getAllUsers, getDailyAttendanceStatsV2, getAllTeams, getUserAttendanceRecords } from '@/lib/data-adapter';
+import { getAllUsers, getDailyAttendanceStatsV2, getAllTeams, getUserAttendanceRecords, getWorkdaysInRange } from '@/lib/data-adapter';
 import type { User, Team } from '@/types';
+import { subDays } from 'date-fns';
 
 interface TeamStats {
   teamId: string;
@@ -56,15 +57,22 @@ export default function TeamStatsPage() {
         const currentTeamStats = todayStats.find(t => t.teamId === teamId);
         const presentToday = currentTeamStats?.gradeStats.reduce((acc, g) => acc + g.count, 0) || 0;
 
-        // 月間出席率を計算
+        // 過去30日間の活動日数を取得
+        const thirtyDaysAgo = subDays(new Date(), 30);
+        const workdays = await getWorkdaysInRange(thirtyDaysAgo, new Date());
+        const totalWorkdays = workdays.length;
+
+        // 班員の総出席日数を計算
         let totalAttendedDays = 0;
         for (const member of teamMembers) {
           const records = await getUserAttendanceRecords(member.uid, 30);
-          totalAttendedDays += records.filter(r => r.checkInTime).length;
+          const attendedWorkdays = records.filter(r => r.checkInTime && workdays.some(wd => wd.toISOString().split('T')[0] === r.date)).length;
+          totalAttendedDays += attendedWorkdays;
         }
         
-        const averageAttendance = teamMembers.length > 0 ? 
-          Math.round((totalAttendedDays / (teamMembers.length * 30)) * 100) : 0;
+        const averageAttendance = totalWorkdays > 0 && teamMembers.length > 0
+          ? Math.round((totalAttendedDays / (teamMembers.length * totalWorkdays)) * 100)
+          : 0;
           
         setTeamStats({
           teamId,
@@ -73,7 +81,7 @@ export default function TeamStatsPage() {
           totalMembers: teamMembers.length,
           presentToday,
           averageAttendance,
-          monthlyAttendance: {} // 月間データは別途実装が必要
+          monthlyAttendance: {}
         });
       } catch (error) {
         console.error('Failed to fetch team stats:', error);
@@ -166,7 +174,7 @@ export default function TeamStatsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">月間平均出勤率</CardTitle>
+            <CardTitle className="text-sm font-medium">平均出勤率 (対活動日)</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>

@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -20,6 +18,7 @@ import {
 } from 'lucide-react';
 import { getDailyAttendanceStatsV2, getAllTeams, formatKisei } from '@/lib/data-adapter';
 import type { AppUser, Team } from '@/types';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 
 interface TeamMember {
@@ -105,7 +104,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
            if(teamStat) {
             const gradeStat = teamStat.gradeStats.find(gs => gs.grade === member.grade);
             if(gradeStat){
-                const userInStats = gradeStat.users.find(u => u.uid === member.uid);
+                const userInStats = gradeStat.users.find((u:any) => u.uid === member.uid);
                 if (userInStats) {
                     isPresent = userInStats.isPresent;
                 }
@@ -139,10 +138,6 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
 
     buildTeamData();
   }, [allUsers, user, isAdmin]);
-
-  const toggleTeam = (teamId: string) => {
-    setExpandedTeam(prev => (prev === teamId ? null : teamId));
-  };
 
   const handleTeamClick = (teamId: string) => {
     router.push(`/dashboard/team/${encodeURIComponent(teamId)}`);
@@ -213,14 +208,16 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
           {loading ? (
             <div className="px-3 py-2 text-sm text-gray-500">読み込み中...</div>
           ) : (
-            <div className="space-y-1">
+            <Accordion type="single" collapsible className="w-full space-y-1">
               {teams.map((team) => (
-                <div key={team.teamId}>
-                  <div 
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
-                    onClick={() => handleTeamClick(team.teamId)}
-                  >
-                    <div className="flex items-center">
+                <AccordionItem value={team.teamId} key={team.teamId} className="border-b-0">
+                   <AccordionTrigger 
+                     className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer no-underline hover:no-underline"
+                   >
+                    <div 
+                        className="flex items-center flex-grow"
+                        onClick={(e) => { e.stopPropagation(); handleTeamClick(team.teamId); }}
+                    >
                       <Users className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span className="text-left truncate font-medium">
                         {team.teamName}
@@ -233,24 +230,9 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
                       >
                         {team.presentCount}/{team.totalCount}
                       </Badge>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleTeam(team.teamId);
-                        }}
-                        className="p-1 hover:bg-gray-100 rounded transition-colors"
-                      >
-                        {expandedTeam === team.teamId ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </button>
                     </div>
-                  </div>
-                  
-                  {expandedTeam === team.teamId && (
-                    <div className="ml-6 mt-1 space-y-1">
+                  </AccordionTrigger>
+                  <AccordionContent className="ml-6 mt-1 space-y-1 pr-4">
                       {team.members.map((member) => (
                         <div 
                           key={member.uid} 
@@ -268,11 +250,10 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
                           </Badge>
                         </div>
                       ))}
-                    </div>
-                  )}
-                </div>
+                  </AccordionContent>
+                </AccordionItem>
               ))}
-            </div>
+            </Accordion>
           )}
         </div>
       </div>
