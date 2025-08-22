@@ -1,6 +1,8 @@
+
 'use client';
 
-import { format, eachDayOfInterval, isSameMonth, isToday, startOfMonth, endOfMonth } from 'date-fns';
+import { format, eachDayOfInterval, isSameMonth, isToday, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns';
+import { ja } from 'date-fns/locale';
 
 interface CalendarGridProps {
   currentDate: Date;
@@ -21,7 +23,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 }) => {
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
-  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const startDate = startOfWeek(monthStart, { locale: ja });
+  const endDate = endOfWeek(monthEnd, { locale: ja });
+  const days = eachDayOfInterval({ start: startDate, end: endDate });
 
   return (
     <>
