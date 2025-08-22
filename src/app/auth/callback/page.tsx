@@ -1,11 +1,12 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { exchangeCodeForToken, getGitHubUser, getGitHubUserEmails, saveAuthData } from '@/lib/oauth';
 import { Loader2 } from 'lucide-react';
 
-export default function AuthCallback() {
+function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -16,10 +17,10 @@ export default function AuthCallback() {
       try {
         const code = searchParams.get('code');
         const state = searchParams.get('state');
-        const error = searchParams.get('error');
+        const errorParam = searchParams.get('error');
 
-        if (error) {
-          throw new Error(`GitHub OAuth error: ${error}`);
+        if (errorParam) {
+          throw new Error(`GitHub OAuth error: ${errorParam}`);
         }
 
         if (!code) {
@@ -91,4 +92,19 @@ export default function AuthCallback() {
   }
 
   return null;
+}
+
+export default function AuthCallbackPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 className="h-10 w-10 animate-spin mx-auto mb-4" />
+                <h2 className="text-xl font-semibold mb-2">Loading...</h2>
+              </div>
+            </div>
+        }>
+            <AuthCallbackContent />
+        </Suspense>
+    );
 }
