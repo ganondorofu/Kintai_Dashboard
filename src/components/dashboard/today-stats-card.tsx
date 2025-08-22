@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useDashboard } from '@/contexts/dashboard-context';
-import { convertGradeToDisplay } from '@/lib/attendance-utils';
+import { formatKiseiAsGrade } from '@/lib/data-adapter';
 import { getTodayAttendanceStats } from '@/lib/data-adapter';
 
 interface TodayStatsCardProps {
@@ -38,7 +39,6 @@ export const TodayStatsCard: React.FC<TodayStatsCardProps> = ({ className }) => 
         setLoading(true);
         const stats = await getTodayAttendanceStats();
         setTodayStats(stats);
-        console.log('TodayStatsCard: Real stats loaded:', stats);
       } catch (error) {
         console.error('TodayStatsCard: Failed to load stats:', error);
       } finally {
@@ -57,7 +57,7 @@ export const TodayStatsCard: React.FC<TodayStatsCardProps> = ({ className }) => 
 
     const teams = Object.entries(todayStats.statsByGrade).map(([grade, stats]: [string, any]) => {
       const gradeNumber = parseInt(grade);
-      const gradeDisplay = convertGradeToDisplay(gradeNumber);
+      const gradeDisplay = formatKiseiAsGrade(gradeNumber);
       
       return {
         teamName: gradeDisplay,

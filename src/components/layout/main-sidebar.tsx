@@ -16,7 +16,7 @@ import {
   Users,
   LogOut
 } from 'lucide-react';
-import { getDailyAttendanceStatsV2, debugAttendanceLogs } from '@/lib/data-adapter';
+import { getDailyAttendanceStatsV2, debugAttendanceLogs, formatKisei } from '@/lib/data-adapter';
 
 interface TeamMember {
   uid: string;
@@ -53,24 +53,19 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
   const [loading, setLoading] = useState(true);
 
   // 学年変換関数
-  const convertPeriodToGrade = (teamId: string) => {
-    if (teamId?.includes('10期生')) return '1年生';
-    if (teamId?.includes('9期生')) return '2年生';
-    if (teamId?.includes('8期生')) return '3年生';
-    return teamId || '未所属';
+  const convertGradeToString = (grade: number) => {
+      return `${grade}期生`;
   };
 
   // メインナビゲーション
   const navigation = [
     { name: 'ダッシュボード', href: '/dashboard', icon: Home, current: pathname === '/dashboard' },
-    { name: 'NFC勤怠記録', href: '/kiosk', icon: Calendar, current: pathname === '/kiosk' },
   ];
 
   // 班データの構築
   useEffect(() => {
     const buildTeamData = async () => {
       if (!allUsers || allUsers.length === 0) {
-        console.log('MainSidebar: allUsers is empty or undefined');
         setLoading(false);
         return;
       }
@@ -85,7 +80,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
         
         // 班ごとにユーザーをグループ化
         const teamGroups = allUsers.reduce((acc, member) => {
-          const teamId = member.teamId || `${member.grade}年生` || '未所属';
+          const teamId = convertGradeToString(member.grade);
           
           // 一般ユーザーの場合、自分の学年のみ表示
           if (!isAdmin && member.grade !== currentUserGrade) {
@@ -96,7 +91,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
             acc[teamId] = {
               teamId,
               teamName: teamId,
-              grade: convertPeriodToGrade(teamId),
+              grade: teamId,
               members: [],
               presentCount: 0,
               totalCount: 0
@@ -105,7 +100,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
 
           // 今日の出席状況を確認
           let isPresent = false;
-          const teamStat = todayStats.find(stat => stat.teamId === teamId);
+          const teamStat = todayStats.find(stat => stat.teamName === teamId);
           if(teamStat) {
             const gradeStat = teamStat.gradeStats.find(gs => gs.grade === member.grade);
             if(gradeStat){
@@ -129,7 +124,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
         }, {} as Record<string, TeamData>);
 
         const sortedTeams = Object.values(teamGroups).sort((a, b) => 
-          a.grade.localeCompare(b.grade, 'ja')
+          a.grade.localeCompare(b.grade, undefined, { numeric: true })
         );
 
         setTeams(sortedTeams);
