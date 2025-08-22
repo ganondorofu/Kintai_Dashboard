@@ -16,7 +16,7 @@ import {
   Users,
   LogOut
 } from 'lucide-react';
-import { getDailyAttendanceStatsV2, getAllTeams } from '@/lib/data-adapter';
+import { getDailyAttendanceStatsV2, getAllTeams, formatKisei } from '@/lib/data-adapter';
 import type { AppUser, Team } from '@/types';
 
 interface TeamMember {
