@@ -26,7 +26,7 @@ export default function UserDashboard({ user }: UserDashboardProps) {
           個人ダッシュボード
         </h1>
         <p className="text-gray-600">
-          こんにちは、{user.firstname} {user.lastname}さん！あなたの個人ダッシュボードです。
+          こんにちは、{user.lastname} {user.firstname}さん！あなたの個人ダッシュボードです。
         </p>
       </div>
       
