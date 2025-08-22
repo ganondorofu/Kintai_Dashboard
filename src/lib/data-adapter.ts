@@ -362,47 +362,53 @@ export const getUserAttendanceLogsV2 = async (
   limitCount: number = 50
 ): Promise<AttendanceLog[]> => {
   try {
-    let logs: AttendanceLog[] = [];
-    
-    if (startDate && endDate) {
-      const yearMonths = getYearMonthsInRange(startDate, endDate);
+    const logs: AttendanceLog[] = [];
+    const effectiveStartDate = startDate || new Date(0); // If no start date, get all logs
+    const effectiveEndDate = endDate || new Date(); // If no end date, up to now
+
+    const yearMonths = getYearMonthsInRange(effectiveStartDate, effectiveEndDate);
       
-      for (const { year, month } of yearMonths) {
+    // 降順で取得するため、年月を逆順に処理
+    for (const { year, month } of yearMonths.reverse()) {
         const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
-        
-        for (let day = 1; day <= daysInMonth; day++) {
-          const dayStr = day.toString().padStart(2, '0');
-          const dateKey = `${year}-${month}-${dayStr}`;
-          const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
-          
-          const q = query(
-            dayLogsRef,
-            where('uid', '==', uid),
-            where('timestamp', '>=', startDate),
-            where('timestamp', '<=', endDate),
-            orderBy('timestamp', 'desc')
-          );
-          
-          const daySnapshot = await getDocs(q);
-          const dayLogs = daySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          } as AttendanceLog));
-          
-          logs.push(...dayLogs);
+        const startDay = effectiveEndDate.getFullYear().toString() === year && 
+                         (effectiveEndDate.getMonth() + 1).toString().padStart(2, '0') === month
+                         ? effectiveEndDate.getDate() : daysInMonth;
+
+        const endDay = effectiveStartDate.getFullYear().toString() === year &&
+                       (effectiveStartDate.getMonth() + 1).toString().padStart(2, '0') === month
+                       ? effectiveStartDate.getDate() : 1;
+
+        for (let day = startDay; day >= endDay; day--) {
+            if (logs.length >= limitCount) break;
+
+            const dayStr = day.toString().padStart(2, '0');
+            const dateKey = `${year}-${month}-${dayStr}`;
+            const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
+            
+            const q = query(
+                dayLogsRef,
+                where('uid', '==', uid),
+                orderBy('timestamp', 'desc')
+            );
+
+            const daySnapshot = await getDocs(q);
+            const dayLogs = daySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            } as AttendanceLog));
+
+            logs.push(...dayLogs);
         }
-      }
-      
-      logs.sort((a, b) => {
-        const aTime = safeTimestampToDate(a.timestamp)?.getTime() || 0;
-        const bTime = safeTimestampToDate(b.timestamp)?.getTime() || 0;
-        return bTime - aTime;
-      });
-      
-      return logs.slice(0, limitCount);
-    } else {
-      return await getUserAttendanceLogs(uid, startDate, endDate, limitCount);
+        if (logs.length >= limitCount) break;
     }
+
+    // 新しいログがない場合、古い構造から取得を試みる
+    if (logs.length === 0) {
+        return await getUserAttendanceLogs(uid, startDate, endDate, limitCount);
+    }
+    
+    return logs.slice(0, limitCount);
   } catch (error) {
     console.error('新しい勤怠ログ取得エラー:', error);
     return await getUserAttendanceLogs(uid, startDate, endDate, limitCount);
@@ -420,19 +426,14 @@ export const getUserAttendanceLogs = async (
     let q = query(
       logsRef, 
       where('uid', '==', uid),
-      orderBy('timestamp', 'desc'),
-      limit(limitCount)
+      orderBy('timestamp', 'desc')
     );
 
     if (startDate && endDate) {
-      q = query(
-        logsRef,
-        where('uid', '==', uid),
-        where('timestamp', '>=', startDate),
-        where('timestamp', '<=', endDate),
-        orderBy('timestamp', 'desc')
-      );
+      q = query(q, where('timestamp', '>=', startDate), where('timestamp', '<=', endDate));
     }
+    
+    q = query(q, limit(limitCount));
 
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
@@ -698,9 +699,8 @@ export const getDailyAttendanceStatsV2 = async (
       ...doc.data()
     } as AttendanceLog));
     
-    // 新しい構造にログがない場合は、古い構造から計算する
-    if(logs.length === 0) {
-      return calculateDailyAttendanceFromLogs(targetDate);
+    if (logs.length === 0) {
+       return calculateDailyAttendanceFromLogs(targetDate);
     }
     
     return await calculateDailyAttendanceFromLogsData(logs, targetDate);
@@ -1318,7 +1318,9 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
     const batch = writeBatch(db);
 
     for (const user of allUsers) {
-      // 新しいデータ構造から最後のログを取得
+      let lastLog: AttendanceLog | null = null;
+      
+      // 新しいデータ構造から今日の最後のログを取得
       const newLogsRef = collection(db, 'attendances', dateKey, 'logs');
       const qNew = query(
         newLogsRef,
@@ -1328,9 +1330,8 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
       );
       const newLogSnapshot = await getDocs(qNew);
       
-      let lastLog: DocumentData | null = null;
       if (!newLogSnapshot.empty) {
-        lastLog = newLogSnapshot.docs[0].data();
+        lastLog = newLogSnapshot.docs[0].data() as AttendanceLog;
       } else {
         // 新しい構造にない場合、古い構造もチェック
         const oldLogsRef = collection(db, 'attendance_logs');
@@ -1338,12 +1339,13 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
           oldLogsRef,
           where('uid', '==', user.uid),
           where('timestamp', '>=', startOfDay),
+          where('timestamp', '<', now),
           orderBy('timestamp', 'desc'),
           limit(1)
         );
         const oldLogSnapshot = await getDocs(qOld);
         if (!oldLogSnapshot.empty) {
-          lastLog = oldLogSnapshot.docs[0].data();
+          lastLog = oldLogSnapshot.docs[0].data() as AttendanceLog;
         }
       }
 
