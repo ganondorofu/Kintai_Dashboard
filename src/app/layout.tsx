@@ -1,7 +1,7 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from '@/components/firebase-auth-provider';
+import { AuthProvider } from '@/components/oauth-auth-provider';
 
 export const metadata: Metadata = {
   title: 'IT勤怠管理システム',

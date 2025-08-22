@@ -1,14 +1,14 @@
 
 'use client';
 
-import { useAuth } from '@/components/firebase-auth-provider';
+import { useAuth } from '@/hooks/use-auth';
 import UserDashboard from '@/components/dashboard/user-dashboard';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 export default function DashboardPage() {
-  const { user: appUser, loading } = useAuth();
+  const { appUser, loading } = useAuth();
 
   if (loading) {
     return <DashboardSkeleton />;
