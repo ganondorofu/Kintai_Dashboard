@@ -35,23 +35,14 @@ export const DayDetail: React.FC<DayDetailProps> = ({
                   {teamStat.teamName || `班: ${teamStat.teamId}`}
                 </h4>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {teamStat.gradeStats
                     .filter(gradeStat => gradeStat.count > 0)
                     .map(gradeStat => (
-                    <div key={gradeStat.grade} className="bg-gray-50 rounded p-3">
-                        <div className="flex justify-between items-center w-full py-1">
-                            <span className="font-medium">{convertGradeToDisplay(gradeStat.grade)}</span>
-                            <span className="bg-blue-100 text-blue-800 text-sm px-2 py-1 rounded">
-                                {gradeStat.count}人
-                            </span>
-                        </div>
-                        <div className="space-y-1 border-t pt-2 mt-2">
-                            {gradeStat.users?.filter(u => u.isPresent).map(user => (
-                                <div key={user.uid} className="text-xs text-gray-600">
-                                {user.lastname || ''} {user.firstname || ''}
-                                </div>
-                            ))}
+                    <div key={gradeStat.grade} className="bg-gray-50 rounded p-3 text-center">
+                        <div className="font-medium">{convertGradeToDisplay(gradeStat.grade)}</div>
+                        <div className="text-2xl font-bold text-blue-600 mt-1">
+                            {gradeStat.count}人
                         </div>
                     </div>
                   ))}
