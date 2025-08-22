@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -261,14 +262,6 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
       {/* フッター（ユーザー情報・ログアウト） */}
       {user && (
         <div className="flex-shrink-0 border-t px-4 py-4">
-          <div className="bg-gray-50 rounded-lg p-3 mb-3">
-            <div className="text-sm font-medium text-gray-900">
-              {user.firstname} {user.lastname}
-            </div>
-            <div className="text-xs text-gray-500">
-              {user.role === 'admin' ? '管理者' : '一般ユーザー'}
-            </div>
-          </div>
           <Button
             variant="outline"
             size="sm"
