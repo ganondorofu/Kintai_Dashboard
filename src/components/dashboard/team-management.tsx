@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { getTeamUsers, getTeamAttendanceLogs, getAllUsers, getAllTeams, updateUser, formatKisei } from '@/lib/data-adapter';
+import { getTeamMembers, getTeamAttendanceLogs, getAllUsers, getAllTeams, updateUser, formatKisei } from '@/lib/data-adapter';
 import type { AppUser, AttendanceLog, Team } from '@/types';
 
 interface TeamManagementProps {
@@ -27,7 +27,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
       try {
         const [fetchedTeams, fetchedUsers] = await Promise.all([
           getAllTeams(),
-          isAdmin ? getAllUsers() : getTeamUsers(currentUser.teamId || '')
+          isAdmin ? getAllUsers() : getTeamMembers(currentUser.teamId || '')
         ]);
         
         setTeams(fetchedTeams);
