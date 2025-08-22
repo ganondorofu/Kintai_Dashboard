@@ -17,7 +17,7 @@ import {
   LogOut,
   Shield,
 } from 'lucide-react';
-import { getDailyAttendanceStatsV2, getAllTeams, formatKisei } from '@/lib/data-adapter';
+import { getDailyAttendanceStats, getAllTeams, formatKisei } from '@/lib/data-adapter';
 import type { AppUser, Team } from '@/types';
 
 interface TeamMember {
@@ -26,6 +26,7 @@ interface TeamMember {
   lastname: string;
   github: string;
   isPresent: boolean;
+  status: '出勤中' | '退勤';
   lastAttendance?: {
     type: 'entry' | 'exit';
     timestamp: string;
@@ -67,10 +68,10 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
       try {
         setLoading(true);
         const [todayStats, fetchedTeams] = await Promise.all([
-          getDailyAttendanceStatsV2(new Date()),
+          getDailyAttendanceStats(new Date()),
           getAllTeams(),
         ]);
-
+        
         setTeamDefinitions(fetchedTeams);
         const teamNameMap = fetchedTeams.reduce((acc, team) => {
             acc[team.id] = team.name;
@@ -111,7 +112,8 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
           
           acc[teamId].members.push({
             ...member,
-            isPresent
+            isPresent,
+            status: isPresent ? '出勤中' : '退勤'
           });
           acc[teamId].totalCount++;
           if (isPresent) {
@@ -209,7 +211,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
         {/* 班一覧 */}
         <div className="px-2 py-4">
           <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-            班別出席状況
+            班別出勤状況
           </h3>
           
           {loading ? (
@@ -264,9 +266,9 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
                           </span>
                           <Badge 
                             variant={member.isPresent ? "default" : "outline"}
-                            className="text-xs"
+                            className={cn("text-xs", member.isPresent ? "bg-green-100 text-green-800" : "")}
                           >
-                            {member.isPresent ? '出席' : '未出席'}
+                            {member.status}
                           </Badge>
                         </div>
                       ))}

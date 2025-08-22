@@ -496,14 +496,26 @@ const calculateDailyAttendanceFromLogs = async (
     const q = query(
       logsRef,
       where('timestamp', '>=', startOfDay),
-      where('timestamp', '<=', endOfDay),
-      where('type', '==', 'entry')
+      where('timestamp', '<=', endOfDay)
     );
     
     const snapshot = await getDocs(q);
-    const dayEntryLogs = snapshot.docs.map(doc => doc.data() as AttendanceLog);
+    const dayLogs = snapshot.docs.map(doc => doc.data() as AttendanceLog);
     
-    const attendedUids = [...new Set(dayEntryLogs.map(log => log.uid))];
+    const userLatestLog = new Map<string, AttendanceLog>();
+    dayLogs.forEach(log => {
+      const existing = userLatestLog.get(log.uid);
+      if (!existing || (safeTimestampToDate(log.timestamp)?.getTime() || 0) > (safeTimestampToDate(existing.timestamp)?.getTime() || 0)) {
+        userLatestLog.set(log.uid, log);
+      }
+    });
+
+    const attendedUids = new Set<string>();
+    userLatestLog.forEach((log, uid) => {
+      if (log.type === 'entry') {
+        attendedUids.add(uid);
+      }
+    });
     
     const allUsers = await getAllUsers();
     const teams = await getAllTeams();
@@ -532,11 +544,11 @@ const calculateDailyAttendanceFromLogs = async (
       }, {} as Record<number, AppUser[]>);
 
       const gradeStats = Object.entries(gradeGroups).map(([gradeStr, gradeUsers]) => {
-        const gradePresentUsers = gradeUsers.filter(u => attendedUids.includes(u.uid));
+        const gradePresentUsers = gradeUsers.filter(u => attendedUids.has(u.uid));
         return {
           grade: parseInt(gradeStr),
           count: gradePresentUsers.length,
-          users: gradeUsers.map(u => ({ ...u, isPresent: attendedUids.includes(u.uid) }))
+          users: gradeUsers.map(u => ({ ...u, isPresent: attendedUids.has(u.uid) }))
         };
       }).sort((a, b) => b.grade - a.grade); 
 
@@ -662,7 +674,7 @@ export const getDailyAttendanceStats = async (
 ): Promise<{
   teamId: string;
   teamName?: string;
-  gradeStats: { grade: number; count: number; users: AppUser[] }[];
+  gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
 }[]> => {
   return calculateDailyAttendanceFromLogs(targetDate);
 };
@@ -685,6 +697,11 @@ export const getDailyAttendanceStatsV2 = async (
       id: doc.id,
       ...doc.data()
     } as AttendanceLog));
+    
+    // If no logs in new structure, calculate from old structure.
+    if(logs.length === 0) {
+      return calculateDailyAttendanceFromLogs(targetDate);
+    }
     
     return await calculateDailyAttendanceFromLogsData(logs, targetDate);
   } catch (error) {
