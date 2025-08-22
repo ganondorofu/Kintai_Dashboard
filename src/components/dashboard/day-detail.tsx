@@ -1,3 +1,4 @@
+
 'use client';
 
 import { format } from 'date-fns';
@@ -16,17 +17,28 @@ export const DayDetail: React.FC<DayDetailProps> = ({
   dayStats,
   loading
 }) => {
+  const totalAttendees = dayStats.reduce((total, team) => 
+    total + team.gradeStats.reduce((teamTotal, grade) => teamTotal + grade.count, 0), 
+  0);
+
   return (
     <div className="bg-white shadow rounded-lg p-6">
-      <h3 className="text-lg font-semibold mb-4">
-        {format(selectedDate, 'yyyy年MM月dd日', { locale: ja })} の出席状況
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold">
+          {format(selectedDate, 'yyyy年MM月dd日', { locale: ja })} の出席状況
+        </h3>
+        {totalAttendees > 0 && (
+          <span className="font-bold text-gray-800">
+            合計: {totalAttendees}人
+          </span>
+        )}
+      </div>
 
       {loading ? (
         <div className="flex justify-center p-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
         </div>
-      ) : dayStats && dayStats.length > 0 && dayStats.some(ts => ts.gradeStats.some(gs => gs.count > 0)) ? (
+      ) : totalAttendees > 0 ? (
         <div className="space-y-6">
           {dayStats.map(teamStat => (
             teamStat.gradeStats.some(gs => gs.count > 0) && (
