@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -77,7 +78,7 @@ export default function AdminDashboard() {
           管理者ダッシュボード
         </h1>
         <p className="text-gray-600">
-          こんにちは、{user.firstname}さん（管理者）
+          こんにちは、{user.firstname} {user.lastname}さん（管理者）
         </p>
         <div className="mt-4 flex space-x-4 text-sm text-gray-500">
           <span>GitHubアカウント: {user.github}</span>
@@ -156,7 +157,7 @@ export default function AdminDashboard() {
                                 {grade.count} / {grade.users.length}
                               </div>
                               <div className="text-sm text-gray-600">
-                                {grade.grade}年生
+                                {formatKiseiAsGrade(grade.grade)}
                               </div>
                             </div>
                           ))}

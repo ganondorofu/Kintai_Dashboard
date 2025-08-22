@@ -10,13 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
   Home, 
-  Calendar, 
+  User as UserIcon,
   ChevronDown,
   ChevronRight,
   Users,
   LogOut
 } from 'lucide-react';
-import { getDailyAttendanceStatsV2, debugAttendanceLogs, formatKisei } from '@/lib/data-adapter';
+import { getDailyAttendanceStatsV2 } from '@/lib/data-adapter';
 
 interface TeamMember {
   uid: string;
@@ -52,6 +52,8 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
+  const isAdmin = user?.role === 'admin';
+
   // 学年変換関数
   const convertGradeToString = (grade: number) => {
       return `${grade}期生`;
@@ -59,7 +61,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
 
   // メインナビゲーション
   const navigation = [
-    { name: 'ダッシュボード', href: '/dashboard', icon: Home, current: pathname === '/dashboard' },
+    { name: '個人ダッシュボード', href: '/dashboard', icon: Home, current: pathname === '/dashboard' },
   ];
 
   // 班データの構築
@@ -74,8 +76,6 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
         setLoading(true);
         const todayStats = await getDailyAttendanceStatsV2(new Date());
         
-        // 管理者か一般ユーザーかでフィルタリング
-        const isAdmin = user?.role === 'admin';
         const currentUserGrade = user?.grade;
         
         // 班ごとにユーザーをグループ化
@@ -98,7 +98,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
             };
           }
 
-          // 今日の出席状況を確認
+          // 今日の出勤状況を確認
           let isPresent = false;
           const teamStat = todayStats.find(stat => stat.teamName === teamId);
           if(teamStat) {
@@ -136,7 +136,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
     };
 
     buildTeamData();
-  }, [allUsers, user]);
+  }, [allUsers, user, isAdmin]);
 
   const toggleTeam = (teamId: string) => {
     const newExpanded = new Set(expandedTeams);
@@ -172,7 +172,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
     <div className="flex flex-col h-full bg-white">
       {/* ヘッダー */}
       <div className="flex items-center flex-shrink-0 px-4 py-4 border-b">
-        <Calendar className="h-6 w-6 text-blue-600 mr-2" />
+        <UserIcon className="h-6 w-6 text-blue-600 mr-2" />
         <h1 className="text-lg font-bold text-gray-900">勤怠管理システム</h1>
       </div>
 

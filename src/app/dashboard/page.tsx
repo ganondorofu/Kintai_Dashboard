@@ -3,6 +3,7 @@
 
 import { useAuth } from '@/components/firebase-auth-provider';
 import AdminDashboard from '@/components/dashboard/admin-dashboard';
+import UserDashboard from '@/components/dashboard/user-dashboard';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -29,23 +30,12 @@ export default function DashboardPage() {
     );
   }
   
-  // 管理者でない場合はアクセスを拒否
-  if (appUser.role !== 'admin') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 space-y-6">
-        <h1 className="text-3xl font-bold text-gray-900">アクセス拒否</h1>
-        <p className="text-lg text-gray-600">このページは管理者専用です。</p>
-        <Button onClick={() => window.history.back()} size="lg">戻る</Button>
-      </div>
-    );
+  // ユーザーの役割に応じて表示するダッシュボードを切り替え
+  if (appUser.role === 'admin') {
+    return <AdminDashboard />;
+  } else {
+    return <UserDashboard user={appUser} />;
   }
-
-
-  return (
-    <>
-      <AdminDashboard />
-    </>
-  );
 }
 
 
