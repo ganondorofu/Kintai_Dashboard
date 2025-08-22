@@ -55,9 +55,11 @@ const safeTimestampToDate = (timestamp: any): Date | null => {
 
 // 新しいデータ構造用のヘルパー関数
 const getAttendancePath = (date: Date): { year: string, month: string, day: string, fullPath: string } => {
-  const year = date.getFullYear().toString();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
+  // JST (UTC+9) で日付を取得
+  const jstDate = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const year = jstDate.getUTCFullYear().toString();
+  const month = (jstDate.getUTCMonth() + 1).toString().padStart(2, '0');
+  const day = jstDate.getUTCDate().toString().padStart(2, '0');
   
   return {
     year,
@@ -408,7 +410,7 @@ export const getUserAttendanceLogsV2 = async (
         return await getUserAttendanceLogs(uid, startDate, endDate, limitCount);
     }
     
-    return logs.slice(0, limitCount);
+    return logs.sort((a,b) => b.timestamp.toMillis() - a.timestamp.toMillis()).slice(0, limitCount);
   } catch (error) {
     console.error('新しい勤怠ログ取得エラー:', error);
     return await getUserAttendanceLogs(uid, startDate, endDate, limitCount);
@@ -700,7 +702,7 @@ export const getDailyAttendanceStatsV2 = async (
     } as AttendanceLog));
     
     if (logs.length === 0) {
-       return calculateDailyAttendanceFromLogs(targetDate);
+       return [];
     }
     
     return await calculateDailyAttendanceFromLogsData(logs, targetDate);
@@ -1305,7 +1307,6 @@ export const watchTokenStatus = (
 export const forceClockOutAllUsers = async (): Promise<{ success: number; noAction: number; failed: number }> => {
   console.log('自動退勤処理を開始します...');
   const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
   const { year, month, day } = getAttendancePath(now);
   const dateKey = `${year}-${month}-${day}`;
 
@@ -1333,7 +1334,8 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
       if (!newLogSnapshot.empty) {
         lastLog = newLogSnapshot.docs[0].data() as AttendanceLog;
       } else {
-        // 新しい構造にない場合、古い構造もチェック
+        // 新しい構造にない場合、古い構造もチェック（移行期間中のため）
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
         const oldLogsRef = collection(db, 'attendance_logs');
         const qOld = query(
           oldLogsRef,
@@ -1358,7 +1360,7 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
           type: 'exit',
           timestamp: serverTimestamp(),
           cardId: user.cardId || 'auto_checkout',
-          memo: 'Forced checkout'
+          memo: 'Forced checkout by system'
         });
         successCount++;
         console.log(`退勤記録を追加: ${user.firstname} ${user.lastname}`);
@@ -1373,6 +1375,8 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
   } catch (error) {
     console.error('自動退勤処理中にエラーが発生しました:', error);
     // 全件失敗として返す
-    return { success: 0, noAction: 0, failed: (await getAllUsers()).length };
+    const userCount = (await getAllUsers()).length;
+    return { success: 0, noAction: userCount - failureCount, failed: failureCount };
   }
 };
+
