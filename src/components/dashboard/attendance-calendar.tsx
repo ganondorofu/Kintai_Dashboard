@@ -13,7 +13,7 @@ interface AttendanceCalendarProps {
   currentUser: AppUser;
 }
 
-export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({ currentUser }) => {
+export function AttendanceCalendar({ currentUser }: AttendanceCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [dayStats, setDayStats] = useState<DayStats[]>([]);
