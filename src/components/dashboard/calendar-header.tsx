@@ -48,7 +48,6 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
           <button
             onClick={onRefresh}
             className="p-2 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-600 disabled:opacity-50"
-            disabled={monthlyLoading}
             title="データを再取得"
           >
             🔄
