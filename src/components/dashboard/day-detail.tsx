@@ -1,11 +1,9 @@
-
 'use client';
 
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { convertGradeToDisplay } from '@/lib/attendance-utils';
 import type { DayStats } from '@/hooks/use-attendance-data';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface DayDetailProps {
   selectedDate: Date;
@@ -42,25 +40,19 @@ export const DayDetail: React.FC<DayDetailProps> = ({
                     .filter(gradeStat => gradeStat.count > 0)
                     .map(gradeStat => (
                     <div key={gradeStat.grade} className="bg-gray-50 rounded p-3">
-                        <Accordion type="single" collapsible className="w-full">
-                            <AccordionItem value="item-1" className="border-b-0">
-                                <AccordionTrigger className="flex justify-between items-center w-full py-1 hover:no-underline">
-                                    <span className="font-medium">{convertGradeToDisplay(gradeStat.grade)}</span>
-                                    <span className="bg-blue-100 text-blue-800 text-sm px-2 py-1 rounded">
-                                        {gradeStat.count}人
-                                    </span>
-                                </AccordionTrigger>
-                                <AccordionContent className="pt-2">
-                                    <div className="space-y-1 border-t pt-2 mt-1">
-                                    {gradeStat.users?.filter(u => u.isPresent).map(user => (
-                                        <div key={user.uid} className="text-xs text-gray-600">
-                                        {user.lastname || ''} {user.firstname || ''}
-                                        </div>
-                                    ))}
-                                    </div>
-                                </AccordionContent>
-                            </AccordionItem>
-                        </Accordion>
+                        <div className="flex justify-between items-center w-full py-1">
+                            <span className="font-medium">{convertGradeToDisplay(gradeStat.grade)}</span>
+                            <span className="bg-blue-100 text-blue-800 text-sm px-2 py-1 rounded">
+                                {gradeStat.count}人
+                            </span>
+                        </div>
+                        <div className="space-y-1 border-t pt-2 mt-2">
+                            {gradeStat.users?.filter(u => u.isPresent).map(user => (
+                                <div key={user.uid} className="text-xs text-gray-600">
+                                {user.lastname || ''} {user.firstname || ''}
+                                </div>
+                            ))}
+                        </div>
                     </div>
                   ))}
                 </div>
