@@ -4,14 +4,15 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import type { AppUser, AttendanceLog } from '@/types';
-import { getUserAttendanceLogsV2, getAllTeams } from '@/lib/data-adapter';
+import type { AppUser, AttendanceLog, Team } from '@/types';
+import { getUserAttendanceLogsV2 } from '@/lib/data-adapter';
 
 interface UserInfoCardProps {
   user: AppUser;
+  allTeams: Team[];
 }
 
-export const UserInfoCard: React.FC<UserInfoCardProps> = ({ user }) => {
+export const UserInfoCard: React.FC<UserInfoCardProps> = ({ user, allTeams }) => {
   const [lastLog, setLastLog] = useState<AttendanceLog | null>(null);
   const [loading, setLoading] = useState(true);
   const [teamName, setTeamName] = useState<string | null>(null);
@@ -24,8 +25,7 @@ export const UserInfoCard: React.FC<UserInfoCardProps> = ({ user }) => {
         setLastLog(logs.length > 0 ? logs[0] : null);
 
         if (user.teamId) {
-          const teams = await getAllTeams();
-          const team = teams.find(t => t.id === user.teamId);
+          const team = allTeams.find(t => t.id === user.teamId);
           setTeamName(team?.name || user.teamId);
         } else {
           setTeamName('未所属');
@@ -39,7 +39,7 @@ export const UserInfoCard: React.FC<UserInfoCardProps> = ({ user }) => {
     };
 
     fetchData();
-  }, [user.uid, user.teamId]);
+  }, [user.uid, user.teamId, allTeams]);
 
   const currentStatus = loading ? '確認中...' : (lastLog?.type === 'entry' ? '出勤中' : '退勤済み');
   const statusColor = currentStatus === '出勤中' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800';

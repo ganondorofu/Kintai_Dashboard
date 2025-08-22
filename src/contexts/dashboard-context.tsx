@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { getAllUsers } from '@/lib/data-adapter';
+import { getAllUsers, getAllTeams } from '@/lib/data-adapter';
 import type { AppUser, Team } from '@/types';
 import type { DayStats, MonthlyData } from '@/hooks/use-attendance-data';
 
@@ -44,10 +44,17 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setIsLoading(true);
         console.log('DashboardProvider: Loading initial data...');
         
-        // ユーザーデータを取得
-        const users = await getAllUsers();
+        // ユーザーデータとチームデータを並行して取得
+        const [users, teams] = await Promise.all([
+          getAllUsers(),
+          getAllTeams()
+        ]);
+        
         console.log('DashboardProvider: Users loaded:', users.length);
         setAllUsers(users);
+        
+        console.log('DashboardProvider: Teams loaded:', teams.length);
+        setAllTeams(teams);
         
       } catch (error) {
         console.error('DashboardProvider: Failed to load initial data:', error);
