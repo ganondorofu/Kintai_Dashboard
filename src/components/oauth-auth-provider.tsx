@@ -47,13 +47,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   useEffect(() => {
     const initializeAuth = async () => {
       console.log("[AuthProvider] Initializing auth...");
-      setLoading(true);
       try {
         const { tokens, user: storedUser } = getStoredAuthData();
         
         if (tokens && storedUser) {
           console.log("[AuthProvider] Found stored auth data.");
-          // トークンの有効性を確認
           const isValid = await validateToken(tokens.access_token);
           
           if (isValid) {
@@ -75,7 +73,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         console.error('[AuthProvider] Error initializing auth:', error);
         clearAuthData();
       } finally {
-        // We will set loading to false in the next useEffect
+        // This will be handled by the next useEffect,
+        // which depends on the user state.
       }
     };
 
@@ -86,8 +85,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     let unsubscribe: () => void = () => {};
 
     if (user) {
-      console.log('[AuthProvider] User authenticated, fetching Firestore data for uid:', user.id.toString());
-      const userDocRef = doc(db, "users", user.id.toString());
+      const uid = user.id.toString();
+      console.log('[AuthProvider] User authenticated, fetching Firestore data for uid:', uid);
+      const userDocRef = doc(db, "users", uid);
       unsubscribe = onSnapshot(
         userDocRef,
         (doc) => {
@@ -95,7 +95,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             console.log('[AuthProvider] Firestore user data found');
             setAppUser({ uid: doc.id, ...doc.data() } as AppUser);
           } else {
-            console.log('[AuthProvider] No Firestore user data found for uid:', user.id.toString());
+            console.log('[AuthProvider] No Firestore user data found for uid:', uid);
             setAppUser(null);
           }
           setLoading(false);
@@ -119,6 +119,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUser(null);
     setAppUser(null);
     setAccessToken(null);
+    setLoading(false);
   }, []);
 
   return (

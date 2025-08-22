@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { collection, doc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, query, serverTimestamp, where, writeBatch, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { isMemberOfOrg } from '@/lib/github';
 import { getAllTeams } from '@/lib/data-adapter';
@@ -59,7 +59,7 @@ export default function RegisterForm({ user, accessToken, token }: RegisterFormP
     resolver: zodResolver(formSchema),
     defaultValues: {
       firstname: user.name?.split(' ')[0] || '',
-      lastname: user.name?.split(' ')[1] || '',
+      lastname: user.name?.split(' ').slice(1).join(' ') || '',
       teamId: '',
       grade: undefined,
     },
@@ -99,11 +99,9 @@ export default function RegisterForm({ user, accessToken, token }: RegisterFormP
     }
 
     try {
-      const batch = writeBatch(db);
-
       // 2. Find the link request
       const linkRequestsRef = collection(db, 'link_requests');
-      const q = query(linkRequestsRef, where('token', '==', token), where('status', '==', 'waiting'));
+      const q = query(linkRequestsRef, where('token', '==', token));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
@@ -112,13 +110,17 @@ export default function RegisterForm({ user, accessToken, token }: RegisterFormP
         return;
       }
       const linkRequestDoc = querySnapshot.docs[0];
-      const linkRequestData = linkRequestDoc.data();
-      const cardId = linkRequestData.cardId;
+      const cardId = new URLSearchParams(window.location.search).get('cardId');
+      if(!cardId) {
+        throw new Error('Card ID not found in URL.');
+      }
+      
+      const uid = user.id.toString();
 
-      // 3. Create the user document
-      const userDocRef = doc(db, 'users', user.id.toString());
-      batch.set(userDocRef, {
-        uid: user.id.toString(),
+      // 3. Create or update user document
+      const userDocRef = doc(db, 'users', uid);
+      const userData = {
+        uid: uid,
         github: user.email || user.login,
         githubLogin: user.login,
         githubId: user.id,
@@ -130,14 +132,19 @@ export default function RegisterForm({ user, accessToken, token }: RegisterFormP
         teamId: values.teamId,
         grade: values.grade,
         role: 'user', // Default role
-        createdAt: serverTimestamp(),
-      });
+        updatedAt: serverTimestamp(),
+      };
+      
+      const batch = writeBatch(db);
+      
+      batch.set(userDocRef, userData, { merge: true });
 
       // 4. Update the link request
       batch.update(linkRequestDoc.ref, {
         status: 'done',
-        uid: user.id.toString(),
+        uid: uid,
         updatedAt: serverTimestamp(),
+        cardId: cardId,
       });
 
   // 5. Commit the batch
@@ -147,6 +154,7 @@ export default function RegisterForm({ user, accessToken, token }: RegisterFormP
   try { sessionStorage.removeItem('github_access_token'); } catch (e) {}
 
   toast({ title: 'Registration Successful!', description: 'You can now use your card to log attendance.' });
+  form.reset();
 
     } catch (e: any) {
    console.error('[RegisterForm] Registration error:', e);

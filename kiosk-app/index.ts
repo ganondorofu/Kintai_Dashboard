@@ -9,6 +9,7 @@ type AppState = 'WAITING' | 'QR_DISPLAY' | 'CARD_LINKING';
 let currentState: AppState = 'WAITING';
 let currentToken = '';
 let unsubscribe: (() => void) | null = null;
+let currentCardId: string | null = null;
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -32,7 +33,7 @@ const displayMenu = () => {
       console.log('        カード登録モード            ');
       console.log('======================================\n');
       console.log('スマートフォンでQRコードを読み取ってください。');
-      const registrationUrl = `http://localhost/register?token=${currentToken}`; // TODO: get from env
+      const registrationUrl = `https://kintai-dashboard.vercel.app/register?token=${currentToken}&cardId=${currentCardId}`;
       qrcode.generate(registrationUrl, { small: true });
       console.log(`\nURL: ${registrationUrl}`);
       console.log('\nQRコード読み取り後、次の指示をお待ちください...');
@@ -60,12 +61,14 @@ const resetToWaiting = () => {
   }
   currentState = 'WAITING';
   currentToken = '';
+  currentCardId = null;
   displayMenu();
 };
 
-const startRegistrationMode = async () => {
+const startRegistrationMode = async (cardId: string) => {
   currentState = 'QR_DISPLAY';
   currentToken = uuidv4();
+  currentCardId = cardId;
   
   try {
     await createLinkRequest(currentToken);
@@ -95,13 +98,25 @@ rl.on('line', async (input) => {
 
   if (currentState === 'WAITING') {
     if (line === '/') {
-      startRegistrationMode();
+      console.log('登録したいカードIDを入力してください: ');
+      rl.question('', (cardId) => {
+        if(cardId) {
+            startRegistrationMode(cardId);
+        } else {
+            console.log('カードIDが入力されませんでした。');
+            displayMenu();
+        }
+      });
     } else {
       const result = await handleCardIdInput(line);
       console.log(`\n[${result.status.toUpperCase()}] ${result.message}`);
       if (result.subMessage) console.log(result.subMessage);
       
-      setTimeout(displayMenu, 3000);
+      if(result.status === 'unregistered') {
+        startRegistrationMode(line);
+      } else {
+        setTimeout(displayMenu, 3000);
+      }
     }
   } else if (currentState === 'QR_DISPLAY' || currentState === 'CARD_LINKING') {
     if (line.toLowerCase() === 'c') {
