@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { GitHubUser } from '@/lib/oauth';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -15,6 +14,9 @@ import { Loader2 } from 'lucide-react';
 import { collection, doc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { isMemberOfOrg } from '@/lib/github';
+import { getAllTeams } from '@/lib/data-adapter';
+import type { Team } from '@/types';
+import type { GitHubUser } from '@/lib/oauth';
 
 const formSchema = z.object({
   firstname: z.string().min(1, 'First name is required'),
@@ -22,8 +24,6 @@ const formSchema = z.object({
   teamId: z.string().min(1, 'Please select a team'),
   grade: z.coerce.number().min(1, 'Grade is required'),
 });
-
-import type { GitHubUser } from '@/lib/oauth';
 
 type RegisterFormValues = z.infer<typeof formSchema>;
 
@@ -33,16 +33,27 @@ interface RegisterFormProps {
   token: string;
 }
 
-// Mock teams data. In a real app, this would come from Firestore.
-const teams = [
-    { id: 'dev', name: 'Development Team' },
-    { id: 'design', name: 'Design Team' },
-    { id: 'pm', name: 'Project Management' },
-];
-
 export default function RegisterForm({ user, accessToken, token }: RegisterFormProps) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const [teams, setTeams] = useState<Team[]>([]);
+
+  useEffect(() => {
+    const fetchTeams = async () => {
+      try {
+        const fetchedTeams = await getAllTeams();
+        setTeams(fetchedTeams);
+      } catch (error) {
+        console.error("Failed to fetch teams:", error);
+        toast({
+          title: "Error",
+          description: "Could not load teams. Please try again later.",
+          variant: "destructive",
+        });
+      }
+    };
+    fetchTeams();
+  }, [toast]);
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(formSchema),
@@ -227,9 +238,9 @@ export default function RegisterForm({ user, accessToken, token }: RegisterFormP
               name="grade"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Grade (e.g., 42 for 42nd generation)</FormLabel>
+                  <FormLabel>Grade (e.g., 10 for 10th generation)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="42" {...field} />
+                    <Input type="number" placeholder="10" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
