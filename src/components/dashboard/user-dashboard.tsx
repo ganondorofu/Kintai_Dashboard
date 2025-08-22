@@ -13,7 +13,7 @@ interface UserDashboardProps {
 }
 
 export default function UserDashboard({ user }: UserDashboardProps) {
-  const { allUsers, isLoading } = useDashboard();
+  const { isLoading } = useDashboard();
 
   if (isLoading) {
     return <div className="p-6">読み込み中...</div>;

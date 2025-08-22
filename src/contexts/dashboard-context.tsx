@@ -2,18 +2,9 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { getAllUsers } from '@/lib/data-adapter';
-import type { AppUser, AttendanceLog, Team } from '@/types';
+import type { AppUser, Team } from '@/types';
+import type { DayStats, MonthlyData } from '@/hooks/use-attendance-data';
 
-interface DayStats {
-  teamId: string;
-  teamName?: string;
-  gradeStats: { grade: number; count: number; users: AppUser[] }[];
-}
-
-interface MonthlyData {
-  totalCount: number;
-  teamStats: DayStats[];
-}
 
 interface DashboardContextType {
   // キャッシュデータ
@@ -44,7 +35,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [todayStats, setTodayStats] = useState<DayStats[]>([]);
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // 初期データの取得
   useEffect(() => {
