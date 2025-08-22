@@ -13,13 +13,8 @@ export default function Home() {
       </div>
       
       <div className="flex flex-col sm:flex-row gap-4">
-        <Link href="/kiosk">
-          <Button size="lg" className="w-full sm:w-auto">
-            NFC勤怠記録
-          </Button>
-        </Link>
         <Link href="/login">
-          <Button variant="outline" size="lg" className="w-full sm:w-auto">
+          <Button size="lg" className="w-full sm:w-auto">
             管理画面ログイン
           </Button>
         </Link>
