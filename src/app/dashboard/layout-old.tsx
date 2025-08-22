@@ -1,14 +1,17 @@
 'use client';
 
 import SidebarLayout from '@/components/layout/sidebar-layout';
+import { useAuth } from '@/components/firebase-auth-provider';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { Loader } from 'lucide-react';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarInset, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { LayoutDashboard, Users, LogOut } from 'lucide-react';
+import { signOut as firebaseSignOut } from 'firebase/auth';
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <SidebarLayout>{children}</SidebarLayout>;
-}
 
 export default function DashboardLayout({
   children,
@@ -33,7 +36,7 @@ export default function DashboardLayout({
   }
 
   const handleLogout = async () => {
-    await firebaseSignOut();
+    // await firebaseSignOut();
     router.push('/login');
   };
   
@@ -47,7 +50,7 @@ export default function DashboardLayout({
         <SidebarHeader>
           <div className="flex items-center gap-3">
             <Avatar>
-              <AvatarImage src={user.photoURL ?? undefined} alt={`${user.firstname} ${user.lastname}`} />
+              <AvatarImage src={user.avatarUrl ?? undefined} alt={`${user.firstname} ${user.lastname}`} />
               <AvatarFallback>{getInitials(user.firstname, user.lastname)}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
