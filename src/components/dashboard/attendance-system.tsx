@@ -37,6 +37,7 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
       }
     } catch (error) {
       console.error('勤怠記録の取得に失敗:', error);
+      setLastAction(null);
     }
   };
 
@@ -55,9 +56,11 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
 
   // 最後の出勤時刻からの経過時間
   const getWorkingTime = () => {
-    if (lastAction !== 'entry') return null;
+    if (lastAction !== 'entry' || recentLogs.length === 0) return null;
+    
     const sortedLogs = [...recentLogs].sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
     const lastEntry = sortedLogs.find(log => log.type === 'entry');
+    
     if (lastEntry) {
       return formatDistanceToNow(lastEntry.timestamp.toDate(), { locale: ja, addSuffix: false });
     }
@@ -164,3 +167,4 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
     </div>
   );
 }
+
