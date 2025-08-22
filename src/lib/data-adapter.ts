@@ -1,5 +1,6 @@
 
 
+
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
@@ -1370,7 +1371,6 @@ export const forceClockOutAllUsers = async (): Promise<{ success: number; noActi
     for (const user of allUsers) {
       let lastLog: AttendanceLog | null = null;
       
-      // 新しいデータ構造から今日の最後のログを取得
       const newLogsRef = collection(db, 'attendances', dateKey, 'logs');
       const qNew = query(
         newLogsRef,
@@ -1436,17 +1436,15 @@ export const getWorkdaysInRange = async (startDate: Date, endDate: Date): Promis
     );
     const snapshot = await getDocs(q);
     
-    // If workdays collection is used, return dates from it
     if (!snapshot.empty) {
         return snapshot.docs.map(doc => new Date(doc.data().date));
     }
     
-    // Fallback: Check attendance logs if workdays collection is not populated
-    const allLogs = await getAllAttendanceLogs(startDate, endDate, 5000); // Get more logs for this
+    const allLogs = await getAllAttendanceLogs(startDate, endDate, 5000); 
     const workdays = new Set<string>();
     allLogs.forEach(log => {
         const logDate = safeTimestampToDate(log.timestamp);
-        if (logDate) {
+        if (logDate && log.type === 'entry') {
             workdays.add(logDate.toISOString().split('T')[0]);
         }
     });

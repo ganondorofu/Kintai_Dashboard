@@ -1,9 +1,11 @@
 
 'use client';
 
-import { AttendanceSystem } from './attendance-system';
+import { AttendanceLogs } from './attendance-logs';
 import { AttendanceStats } from './attendance-stats';
 import type { AppUser } from '@/types';
+import { UserInfoCard } from './user-info-card';
+
 
 interface UserDashboardProps {
   user: AppUser;
@@ -21,9 +23,17 @@ export default function UserDashboard({ user }: UserDashboardProps) {
         </p>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <AttendanceSystem user={user} />
-        <AttendanceStats user={user} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column */}
+        <div className="lg:col-span-1 space-y-6">
+          <UserInfoCard user={user} />
+          <AttendanceStats user={user} />
+        </div>
+
+        {/* Right Column */}
+        <div className="lg:col-span-2">
+          <AttendanceLogs user={user} />
+        </div>
       </div>
     </div>
   );
