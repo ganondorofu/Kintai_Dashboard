@@ -150,90 +150,6 @@ export const getAllTeams = async (): Promise<Team[]> => {
   }
 };
 
-
-// ログデータから直接出席統計を計算するヘルパー関数
-const calculateDailyAttendanceFromLogs = async (
-  targetDate: Date
-): Promise<{
-  teamId: string;
-  teamName?: string;
-  gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
-}[]> => {
-  try {
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    // 指定日の出勤記録があるログを取得
-    const logsRef = collection(db, 'attendance_logs');
-    const q = query(
-      logsRef,
-      where('timestamp', '>=', startOfDay),
-      where('timestamp', '<=', endOfDay),
-      where('type', '==', 'entry')
-    );
-    
-    const snapshot = await getDocs(q);
-    const dayEntryLogs = snapshot.docs.map(doc => doc.data() as AttendanceLog);
-    
-    // 出席したユーザーのUIDを取得（重複排除）
-    const attendedUids = [...new Set(dayEntryLogs.map(log => log.uid))];
-    
-    const allUsers = await getAllUsers();
-    const teams = await getAllTeams();
-    const teamMap = teams.reduce((acc, team) => {
-      acc[team.id] = team.name;
-      return acc;
-    }, {} as Record<string, string>);
-    
-    // チームごとにグループ化
-    const teamGroups = allUsers.reduce((acc, user) => {
-      const teamId = user.teamId || 'unassigned';
-      if (!acc[teamId]) {
-        acc[teamId] = [];
-      }
-      acc[teamId].push(user);
-      return acc;
-    }, {} as Record<string, AppUser[]>);
-
-    // 結果を構築
-    return Object.entries(teamGroups).map(([teamId, users]) => {
-      // 学年ごとにグループ化
-      const gradeGroups = users.reduce((acc, user) => {
-        const kiseiNumber = user.grade || 10;
-        if (!acc[kiseiNumber]) {
-          acc[kiseiNumber] = [];
-        }
-        acc[kiseiNumber].push(user);
-        return acc;
-      }, {} as Record<number, AppUser[]>);
-
-      const gradeStats = Object.entries(gradeGroups).map(([gradeStr, gradeUsers]) => {
-        const gradePresentUsers = gradeUsers.filter(u => attendedUids.includes(u.uid));
-        return {
-          grade: parseInt(gradeStr),
-          count: gradePresentUsers.length,
-          users: gradeUsers.map(u => ({ ...u, isPresent: attendedUids.includes(u.uid) }))
-        };
-      }).sort((a, b) => b.grade - a.grade); // 期生の降順
-
-      return {
-        teamId,
-        teamName: teamMap[teamId],
-        gradeStats
-      };
-    });
-
-  } catch (error) {
-    console.error('ログデータからの統計計算エラー:', error);
-    return [];
-  }
-};
-
-
-// ログデータから直接出席統計を計算するヘルパー関数
 const calculateDailyAttendanceFromLogsData = async (
   logs: AttendanceLog[],
   targetDate: Date
@@ -306,7 +222,6 @@ const calculateDailyAttendanceFromLogsData = async (
     return [];
   }
 };
-
 
 
 // 期生データを学年表示用に変換する関数
@@ -563,6 +478,82 @@ export const getAllAttendanceLogs = async (
   }
 };
 
+const calculateDailyAttendanceFromLogs = async (
+  targetDate: Date
+): Promise<{
+  teamId: string;
+  teamName?: string;
+  gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
+}[]> => {
+  try {
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const logsRef = collection(db, 'attendance_logs');
+    const q = query(
+      logsRef,
+      where('timestamp', '>=', startOfDay),
+      where('timestamp', '<=', endOfDay),
+      where('type', '==', 'entry')
+    );
+    
+    const snapshot = await getDocs(q);
+    const dayEntryLogs = snapshot.docs.map(doc => doc.data() as AttendanceLog);
+    
+    const attendedUids = [...new Set(dayEntryLogs.map(log => log.uid))];
+    
+    const allUsers = await getAllUsers();
+    const teams = await getAllTeams();
+    const teamMap = teams.reduce((acc, team) => {
+      acc[team.id] = team.name;
+      return acc;
+    }, {} as Record<string, string>);
+    
+    const teamGroups = allUsers.reduce((acc, user) => {
+      const teamId = user.teamId || 'unassigned';
+      if (!acc[teamId]) {
+        acc[teamId] = [];
+      }
+      acc[teamId].push(user);
+      return acc;
+    }, {} as Record<string, AppUser[]>);
+
+    return Object.entries(teamGroups).map(([teamId, users]) => {
+      const gradeGroups = users.reduce((acc, user) => {
+        const kiseiNumber = user.grade || 10;
+        if (!acc[kiseiNumber]) {
+          acc[kiseiNumber] = [];
+        }
+        acc[kiseiNumber].push(user);
+        return acc;
+      }, {} as Record<number, AppUser[]>);
+
+      const gradeStats = Object.entries(gradeGroups).map(([gradeStr, gradeUsers]) => {
+        const gradePresentUsers = gradeUsers.filter(u => attendedUids.includes(u.uid));
+        return {
+          grade: parseInt(gradeStr),
+          count: gradePresentUsers.length,
+          users: gradeUsers.map(u => ({ ...u, isPresent: attendedUids.includes(u.uid) }))
+        };
+      }).sort((a, b) => b.grade - a.grade); 
+
+      return {
+        teamId,
+        teamName: teamMap[teamId],
+        gradeStats
+      };
+    });
+
+  } catch (error) {
+    console.error('ログデータからの統計計算エラー:', error);
+    return [];
+  }
+};
+
+
 export const calculateMonthlyAttendanceStats = async (
   year: number,
   month: number
@@ -690,10 +681,6 @@ export const getDailyAttendanceStatsV2 = async (
     const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
     const snapshot = await getDocs(dayLogsRef);
     
-    if (snapshot.empty) {
-      return await getDailyAttendanceStats(targetDate);
-    }
-    
     const logs: AttendanceLog[] = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
@@ -702,7 +689,7 @@ export const getDailyAttendanceStatsV2 = async (
     return await calculateDailyAttendanceFromLogsData(logs, targetDate);
   } catch (error) {
     console.error('新しい日別統計取得エラー:', error);
-    return await getDailyAttendanceStats(targetDate);
+    return [];
   }
 };
 
