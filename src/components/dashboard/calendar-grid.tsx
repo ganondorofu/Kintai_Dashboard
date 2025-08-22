@@ -23,8 +23,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 }) => {
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
+  //週の開始を日曜日に設定
   const startDate = startOfWeek(monthStart, { locale: ja });
   const endDate = endOfWeek(monthEnd, { locale: ja });
+
   const days = eachDayOfInterval({ start: startDate, end: endDate });
 
   return (
@@ -51,12 +53,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               onClick={() => !monthlyLoading && isCurrentMonth && onDateClick(day)}
               onMouseEnter={() => !monthlyLoading && isCurrentMonth && onDateHover?.(day)}
               className={`
-                p-2 min-h-[60px] border transition-colors
+                p-2 min-h-[60px] border transition-colors rounded-md
                 ${!monthlyLoading && isCurrentMonth ? 'cursor-pointer hover:bg-blue-50' : 'cursor-default'}
                 ${isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400'}
-                ${isDayToday ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}
-                ${isSelected ? 'bg-blue-200 border-blue-400' : ''}
-                ${monthlyLoading ? 'opacity-50' : ''}
+                ${isDayToday && isCurrentMonth ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}
+                ${isSelected ? 'bg-blue-200 border-blue-400 ring-2 ring-blue-300' : ''}
+                ${monthlyLoading ? 'opacity-50 animate-pulse' : ''}
               `}
             >
               <div className="font-semibold text-sm">
@@ -68,8 +70,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 </div>
               )}
               {isCurrentMonth && monthlyLoading && (
-                <div className="text-xs text-gray-400 mt-1 animate-pulse">
-                  読込中
+                <div className="text-xs text-gray-400 mt-1">
+                  ...
                 </div>
               )}
             </div>
