@@ -46,10 +46,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   useEffect(() => {
     const initializeAuth = async () => {
+      console.log("[AuthProvider] Initializing auth...");
+      setLoading(true);
       try {
         const { tokens, user: storedUser } = getStoredAuthData();
         
         if (tokens && storedUser) {
+          console.log("[AuthProvider] Found stored auth data.");
           // トークンの有効性を確認
           const isValid = await validateToken(tokens.access_token);
           
@@ -60,15 +63,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           } else {
             console.log('[AuthProvider] Invalid token, clearing auth data');
             clearAuthData();
+            setUser(null);
+            setAccessToken(null);
           }
         } else {
           console.log('[AuthProvider] No stored auth data found');
+          setUser(null);
+          setAccessToken(null);
         }
       } catch (error) {
         console.error('[AuthProvider] Error initializing auth:', error);
         clearAuthData();
       } finally {
-        setLoading(false);
+        // We will set loading to false in the next useEffect
       }
     };
 
@@ -76,28 +83,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   useEffect(() => {
-    // Firestoreからユーザーデータを取得（参考プロジェクトと同じパターン）
+    let unsubscribe: () => void = () => {};
+
     if (user) {
-      console.log('[AuthProvider] User authenticated, fetching Firestore data');
+      console.log('[AuthProvider] User authenticated, fetching Firestore data for uid:', user.id.toString());
       const userDocRef = doc(db, "users", user.id.toString());
-      const unsubscribe = onSnapshot(
+      unsubscribe = onSnapshot(
         userDocRef,
         (doc) => {
           if (doc.exists()) {
             console.log('[AuthProvider] Firestore user data found');
             setAppUser({ uid: doc.id, ...doc.data() } as AppUser);
           } else {
-            console.log('[AuthProvider] No Firestore user data found');
+            console.log('[AuthProvider] No Firestore user data found for uid:', user.id.toString());
             setAppUser(null);
           }
+          setLoading(false);
         },
         (error) => {
           console.error("Error fetching user data:", error);
           setAppUser(null);
+          setLoading(false);
         }
       );
-      return () => unsubscribe();
+    } else {
+        console.log('[AuthProvider] No user, setting loading to false.');
+        setLoading(false);
     }
+    return () => unsubscribe();
   }, [user]);
 
   const signOut = useCallback(() => {

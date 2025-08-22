@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/components/firebase-auth-provider';
+import { useAuth } from '@/hooks/use-auth';
 import { useDashboard } from '@/contexts/dashboard-context';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -48,7 +48,7 @@ interface MainSidebarProps {
 }
 
 export default function MainSidebar({ onClose }: MainSidebarProps) {
-  const { user, signOut } = useAuth();
+  const { appUser, signOut } = useAuth();
   const { allUsers } = useDashboard();
   const pathname = usePathname();
   const router = useRouter();
@@ -56,7 +56,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
   const [teamDefinitions, setTeamDefinitions] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = appUser?.role === 'admin';
 
   // 班データの構築
   useEffect(() => {
@@ -75,7 +75,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
             return acc;
         }, {} as Record<string, string>);
 
-        const currentUserTeamId = user?.teamId;
+        const currentUserTeamId = appUser?.teamId;
         
         // 班ごとにユーザーをグループ化
         const teamGroups = allUsers.reduce((acc, member) => {
@@ -123,7 +123,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
     };
 
     buildTeamData();
-  }, [allUsers, user, isAdmin]);
+  }, [allUsers, appUser, isAdmin]);
 
   const handleTeamClick = (teamId: string) => {
     router.push(`/dashboard/team/${encodeURIComponent(teamId)}`);
@@ -245,7 +245,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
       </div>
 
       {/* フッター（ユーザー情報・ログアウト） */}
-      {user && (
+      {appUser && (
         <div className="flex-shrink-0 border-t px-4 py-4">
           <Button
             variant="outline"

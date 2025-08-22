@@ -1,9 +1,8 @@
 
-
 'use client';
 
 import { useState } from 'react';
-import { useAuth } from '@/components/firebase-auth-provider';
+import { useAuth } from '@/hooks/use-auth';
 import { TeamManagement } from './team-management';
 import { AttendanceCalendar } from './attendance-calendar';
 import { forceClockOutAllUsers } from '@/lib/data-adapter';
@@ -12,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
+  const { appUser } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'users' | 'calendar'>('users');
   const [isForcingCheckout, setIsForcingCheckout] = useState(false);
@@ -38,7 +37,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (!user) return <Skeleton className="h-96 w-full" />;
+  if (!appUser) return <Skeleton className="h-96 w-full" />;
 
   const tabs = [
     { id: 'users' as const, label: 'ユーザー管理' },
@@ -84,10 +83,10 @@ export default function AdminDashboard() {
 
         <div className="p-6">
           {activeTab === 'users' && (
-            <TeamManagement currentUser={user} />
+            <TeamManagement currentUser={appUser} />
           )}
           {activeTab === 'calendar' && (
-            <AttendanceCalendar currentUser={user} />
+            <AttendanceCalendar currentUser={appUser} />
           )}
         </div>
       </div>
