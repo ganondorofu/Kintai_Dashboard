@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -8,14 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { getAllUsers, getUserAttendanceRecords } from '@/lib/data-adapter';
 import { convertToJapaneseGrade } from '@/lib/utils';
-import type { User as UserType, AttendanceRecord } from '@/types';
+import type { User as UserType, AttendanceLog } from '@/types';
 
 interface MemberStats {
   user: UserType;
   totalDays: number;
   attendedDays: number;
   attendanceRate: number;
-  recentAttendance: AttendanceRecord[];
+  recentAttendance: AttendanceLog[];
   averageCheckInTime: string;
   totalWorkHours: number;
 }
