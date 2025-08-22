@@ -22,7 +22,7 @@ import type { User as FirebaseUser } from 'firebase/auth';
 
 // timestamp を安全に Date オブジェクトに変換するヘルパー関数
 // 旧プロジェクトでは new Date() で保存され、Firestore Timestamp として読み取られる
-const safeTimestampToDate = (timestamp: any): Date | null => {
+export const safeTimestampToDate = (timestamp: any): Date | null => {
   try {
     if (!timestamp) return null;
     if (timestamp instanceof Date) {
@@ -746,7 +746,7 @@ export const getDailyAttendanceStatsV2 = async (
     const snapshot = await getDocs(dayLogsRef);
     
     if (snapshot.empty) {
-        return await getDailyAttendanceStats(targetDate);
+        return [];
     }
     
     const logs: AttendanceLog[] = snapshot.docs.map(doc => ({
