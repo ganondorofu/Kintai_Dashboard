@@ -130,7 +130,7 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
                     <span className='font-semibold'>{stats.attendanceRate.toFixed(1)}%</span>
                 </div>
                 <div className='flex justify-between items-center text-sm'>
-                    <span className='text-muted-foreground'>平均勤務時間</span>
+                    <span className='text-muted-foreground'>平均滞在時間</span>
                     <span className='font-semibold'>{formatDuration(stats.averageWorkMinutes)}</span>
                 </div>
             </CardContent>

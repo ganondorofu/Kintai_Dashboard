@@ -124,7 +124,7 @@ export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user }) => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日付</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">出勤時間</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">退勤時間</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">勤務時間</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">滞在時間</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
