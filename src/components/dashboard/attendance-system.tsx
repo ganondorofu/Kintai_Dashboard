@@ -1,37 +1,87 @@
 
-
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getUserAttendanceLogsV2 } from '@/lib/data-adapter';
+import { getUserAttendanceLogsV2, safeTimestampToDate } from '@/lib/data-adapter';
 import type { AppUser, AttendanceLog } from '@/types';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format, differenceInMinutes } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { LogIn, LogOut, Clock, User, Calendar } from 'lucide-react';
+import { LogIn, LogOut, Clock, User, Calendar, History } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface AttendanceSystemProps {
   user: AppUser;
 }
 
+interface ProcessedLog {
+  date: string;
+  checkInTime: Date | null;
+  checkOutTime: Date | null;
+  workDuration: string | null;
+}
+
 export function AttendanceSystem({ user }: AttendanceSystemProps) {
   const [recentLogs, setRecentLogs] = useState<AttendanceLog[]>([]);
+  const [processedLogs, setProcessedLogs] = useState<ProcessedLog[]>([]);
   const [lastAction, setLastAction] = useState<'entry' | 'exit' | null>(null);
 
   // 最近の勤怠記録を取得
   const fetchRecentLogs = async () => {
     try {
       const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const lastMonth = new Date();
+      lastMonth.setMonth(today.getMonth() - 1);
       
-      const logs = await getUserAttendanceLogsV2(user.uid, startOfDay, today, 50); // 1日のログを十分に取得
+      const logs = await getUserAttendanceLogsV2(user.uid, lastMonth, today, 100);
       setRecentLogs(logs);
       
       if (logs.length > 0) {
         // timestampでソートして最新のものを取得
-        const sortedLogs = [...logs].sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+        const sortedLogs = [...logs].sort((a, b) => {
+            const timeA = safeTimestampToDate(a.timestamp)?.getTime() || 0;
+            const timeB = safeTimestampToDate(b.timestamp)?.getTime() || 0;
+            return timeB - timeA;
+        });
         setLastAction(sortedLogs[0].type);
+        
+        // Process logs for monthly history
+        const logsByDate: { [key: string]: AttendanceLog[] } = {};
+        logs.forEach(log => {
+          const logDate = safeTimestampToDate(log.timestamp);
+          if (logDate) {
+            const dateKey = format(logDate, 'yyyy-MM-dd');
+            if (!logsByDate[dateKey]) {
+              logsByDate[dateKey] = [];
+            }
+            logsByDate[dateKey].push(log);
+          }
+        });
+
+        const processed: ProcessedLog[] = Object.keys(logsByDate).map(dateKey => {
+          const dayLogs = logsByDate[dateKey];
+          const entries = dayLogs.filter(l => l.type === 'entry').map(l => safeTimestampToDate(l.timestamp)).filter(Boolean) as Date[];
+          const exits = dayLogs.filter(l => l.type === 'exit').map(l => safeTimestampToDate(l.timestamp)).filter(Boolean) as Date[];
+          
+          const checkInTime = entries.length > 0 ? new Date(Math.min(...entries.map(d => d.getTime()))) : null;
+          const checkOutTime = exits.length > 0 ? new Date(Math.max(...exits.map(d => d.getTime()))) : null;
+          
+          let workDuration = null;
+          if (checkInTime && checkOutTime && checkOutTime > checkInTime) {
+            const minutes = differenceInMinutes(checkOutTime, checkInTime);
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = minutes % 60;
+            workDuration = `${hours}時間${remainingMinutes}分`;
+          }
+
+          return {
+            date: dateKey,
+            checkInTime,
+            checkOutTime,
+            workDuration,
+          };
+        }).sort((a, b) => b.date.localeCompare(a.date));
+
+        setProcessedLogs(processed.slice(0, 4)); //最新4件
       } else {
         setLastAction(null);
       }
@@ -58,11 +108,16 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
   const getWorkingTime = () => {
     if (lastAction !== 'entry' || recentLogs.length === 0) return null;
     
-    const sortedLogs = [...recentLogs].sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+    const sortedLogs = [...recentLogs].sort((a, b) => {
+        const timeA = safeTimestampToDate(a.timestamp)?.getTime() || 0;
+        const timeB = safeTimestampToDate(b.timestamp)?.getTime() || 0;
+        return timeB - timeA;
+    });
     const lastEntry = sortedLogs.find(log => log.type === 'entry');
     
     if (lastEntry) {
-      return formatDistanceToNow(lastEntry.timestamp.toDate(), { locale: ja, addSuffix: false });
+      const entryDate = safeTimestampToDate(lastEntry.timestamp);
+      if(entryDate) return formatDistanceToNow(entryDate, { locale: ja, addSuffix: false });
     }
     return null;
   };
@@ -123,43 +178,40 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
         </CardContent>
       </Card>
 
-      {/* 今日の勤怠記録 */}
+      {/* 月間出退勤履歴 */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            今日の勤怠記録
+            <History className="h-5 w-5" />
+            月間出退勤履歴
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {recentLogs.length === 0 ? (
+          {processedLogs.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
-              今日はまだ勤怠記録がありません
+              過去1ヶ月の勤怠記録がありません
             </div>
           ) : (
-            <div className="space-y-3">
-              {recentLogs.sort((a,b) => a.timestamp.toMillis() - b.timestamp.toMillis()).map((log) => (
-                <div key={log.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    {log.type === 'entry' ? (
-                      <LogIn className="h-5 w-5 text-green-600" />
-                    ) : (
-                      <LogOut className="h-5 w-5 text-red-600" />
-                    )}
-                    <span className="font-medium">
-                      {log.type === 'entry' ? '出勤' : '退勤'}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-mono">
-                      {log.timestamp.toDate().toLocaleTimeString('ja-JP')}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {formatDistanceToNow(log.timestamp.toDate(), { locale: ja, addSuffix: true })}
-                    </div>
-                  </div>
+            <div className="space-y-2">
+              <div className="grid grid-cols-4 gap-2 text-xs text-muted-foreground font-medium px-2">
+                <div>日付</div>
+                <div className="text-center">出勤</div>
+                <div className="text-center">退勤</div>
+                <div className="text-right">勤務時間</div>
+              </div>
+              <div className="space-y-2">
+              {processedLogs.map((log) => (
+                <div key={log.date} className="grid grid-cols-4 gap-2 items-center p-2 bg-gray-50 rounded-lg text-sm">
+                  <div>{format(new Date(log.date), 'MM/dd(E)', {locale: ja})}</div>
+                  <div className="text-center font-mono">{log.checkInTime ? format(log.checkInTime, 'HH:mm') : '-'}</div>
+                  <div className="text-center font-mono">{log.checkOutTime ? format(log.checkOutTime, 'HH:mm') : '-'}</div>
+                  <div className="text-right font-mono">{log.workDuration || '-'}</div>
                 </div>
               ))}
+              </div>
+               <p className="text-xs text-right text-gray-400 mt-2">
+                最新{processedLogs.length}件の記録
+              </p>
             </div>
           )}
         </CardContent>
@@ -167,4 +219,3 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
     </div>
   );
 }
-
