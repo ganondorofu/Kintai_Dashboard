@@ -50,9 +50,6 @@ export const DayDetail: React.FC<DayDetailProps> = ({
                       {gradeStat.users && gradeStat.users.length > 0 ? gradeStat.users.map(user => (
                         <div key={user.uid} className="text-xs text-gray-600">
                           {user.lastname || ''} {user.firstname || ''}
-                          <span className="text-gray-400 ml-1">
-                            ({convertGradeToDisplay(user.grade)})
-                          </span>
                         </div>
                       )) : gradeStat.count > 0 ? (
                         <div className="text-xs text-gray-500 italic">
