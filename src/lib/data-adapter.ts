@@ -1,4 +1,5 @@
 
+
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
@@ -81,6 +82,163 @@ const getYearMonthsInRange = (startDate: Date, endDate: Date): { year: string, m
   
   return yearMonths;
 };
+
+// 期生から学年への変換ヘルパー関数
+// 2025年時点: 8期生=3年生, 9期生=2年生, 10期生=1年生
+const convertKiseiiToGrade = (kiseiNumber: number, currentYear: number = new Date().getFullYear()): number => {
+  // 基準年（2025年）における期生と学年の対応
+  const baseYear = 2025;
+  const baseKiseiToGrade: Record<number, number> = {
+    8: 3,  // 8期生 = 3年生
+    9: 2,  // 9期生 = 2年生
+    10: 1, // 10期生 = 1年生
+  };
+
+  // 年が変わった場合の調整
+  const yearDifference = currentYear - baseYear;
+  
+  if (baseKiseiToGrade[kiseiNumber]) {
+    const adjustedGrade = baseKiseiToGrade[kiseiNumber] + yearDifference;
+    // 学年は1-3の範囲内に制限
+    return Math.max(1, Math.min(3, adjustedGrade));
+  }
+
+  // 基準データにない場合の推定計算
+  // 10期生を基準として、期生が1つ下がると学年が1つ上がる
+  const baseKisei = 10; // 10期生 = 1年生（2025年基準）
+  const estimatedGrade = 1 + (baseKisei - kiseiNumber) + yearDifference;
+  
+  return Math.max(1, Math.min(3, estimatedGrade));
+};
+
+// 全ユーザー一覧を取得（管理者専用）
+export const getAllUsers = async (): Promise<AppUser[]> => {
+  try {
+    const usersRef = collection(db, 'users');
+    const snapshot = await getDocs(usersRef);
+    
+    return snapshot.docs.map(doc => ({
+      uid: doc.id,
+      ...doc.data()
+    } as AppUser));
+  } catch (error) {
+    console.error('全ユーザー取得エラー:', error);
+    return [];
+  }
+};
+
+// チーム一覧を取得（重複を許容しないように修正）
+export const getAllTeams = async (): Promise<Team[]> => {
+  try {
+    const teamsRef = collection(db, 'teams');
+    const snapshot = await getDocs(teamsRef);
+    
+    // IDの重複を排除
+    const teamMap = new Map<string, Team>();
+    snapshot.docs.forEach(doc => {
+      const team = {
+        id: doc.id,
+        ...doc.data() as Omit<Team, 'id'>
+      } as Team;
+      teamMap.set(doc.id, team);
+    });
+    
+    return Array.from(teamMap.values());
+  } catch (error) {
+    console.error('Error fetching teams:', error);
+    throw error;
+  }
+};
+
+
+// ログデータから直接出席統計を計算するヘルパー関数
+const calculateDailyAttendanceFromLogs = async (
+  targetDate: Date
+): Promise<{
+  teamId: string;
+  teamName?: string;
+  gradeStats: { grade: number; count: number; users: AppUser[] }[];
+}[]> => {
+  try {
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // 指定日の出勤記録があるログを取得
+    const logsRef = collection(db, 'attendance_logs');
+    const q = query(
+      logsRef,
+      where('timestamp', '>=', startOfDay),
+      where('timestamp', '<=', endOfDay),
+      where('type', '==', 'entry')
+    );
+    
+    const snapshot = await getDocs(q);
+    const dayEntryLogs = snapshot.docs.map(doc => doc.data() as AttendanceLog);
+    
+    // 出席したユーザーのUIDを取得（重複排除）
+    const attendedUids = [...new Set(dayEntryLogs.map(log => log.uid))];
+    
+    if (attendedUids.length === 0) {
+      return [];
+    }
+
+    // 全ユーザー情報を取得
+    const allUsers = await getAllUsers();
+    
+    // 出席したユーザーの情報を取得
+    const attendedUsers = allUsers.filter(user => attendedUids.includes(user.uid));
+
+    // 班ごとにグループ化
+    const teamGroups = attendedUsers.reduce((acc, user) => {
+      const teamId = user.teamId || 'unassigned';
+      if (!acc[teamId]) {
+        acc[teamId] = [];
+      }
+      acc[teamId].push(user);
+      return acc;
+    }, {} as Record<string, AppUser[]>);
+
+    // チーム情報を取得
+    const teams = await getAllTeams();
+    const teamMap = teams.reduce((acc, team) => {
+      acc[team.id] = team.name;
+      return acc;
+    }, {} as Record<string, string>);
+
+    // 結果を構築
+    return Object.entries(teamGroups).map(([teamId, users]) => {
+      // 学年ごとにグループ化（期生を学年に変換）
+      const gradeGroups = users.reduce((acc, user) => {
+        const kiseiNumber = user.grade || 10; // デフォルトは10期生
+        const actualGrade = convertKiseiiToGrade(kiseiNumber);
+        if (!acc[actualGrade]) {
+          acc[actualGrade] = [];
+        }
+        acc[actualGrade].push(user);
+        return acc;
+      }, {} as Record<number, AppUser[]>);
+
+      const gradeStats = Object.entries(gradeGroups).map(([gradeStr, gradeUsers]) => ({
+        grade: parseInt(gradeStr),
+        count: gradeUsers.length,
+        users: gradeUsers.map(u => ({ ...u, isPresent: true }))
+      })).sort((a, b) => b.grade - a.grade); // 学年の降順
+
+      return {
+        teamId,
+        teamName: teamMap[teamId],
+        gradeStats
+      };
+    });
+  } catch (error) {
+    console.error('ログデータからの統計計算エラー:', error);
+    return [];
+  }
+};
+
 
 // ログデータから直接出席統計を計算するヘルパー関数
 const calculateDailyAttendanceFromLogsData = async (
@@ -169,140 +327,7 @@ const calculateDailyAttendanceFromLogsData = async (
   }
 };
 
-const calculateDailyAttendanceFromLogs = async (
-  targetDate: Date
-): Promise<{
-  teamId: string;
-  teamName?: string;
-  gradeStats: { grade: number; count: number; users: AppUser[] }[];
-}[]> => {
-  try {
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
 
-    // 指定日の出勤記録があるログを取得
-    const logsRef = collection(db, 'attendance_logs');
-    const q = query(
-      logsRef,
-      where('timestamp', '>=', startOfDay),
-      where('timestamp', '<=', endOfDay),
-      where('type', '==', 'entry')
-    );
-    
-    const snapshot = await getDocs(q);
-    const dayEntryLogs = snapshot.docs.map(doc => doc.data() as AttendanceLog);
-    
-    // 出席したユーザーのUIDを取得（重複排除）
-    const attendedUids = [...new Set(dayEntryLogs.map(log => log.uid))];
-    
-    if (attendedUids.length === 0) {
-      return [];
-    }
-
-    // 全ユーザー情報を取得
-    const allUsers = await getAllUsers();
-    
-    // 出席したユーザーの情報を取得
-    const attendedUsers = allUsers.filter(user => attendedUids.includes(user.uid));
-
-    // 班ごとにグループ化
-    const teamGroups = attendedUsers.reduce((acc, user) => {
-      const teamId = user.teamId || 'unassigned';
-      if (!acc[teamId]) {
-        acc[teamId] = [];
-      }
-      acc[teamId].push(user);
-      return acc;
-    }, {} as Record<string, AppUser[]>);
-
-    // チーム情報を取得
-    const teams = await getAllTeams();
-    const teamMap = teams.reduce((acc, team) => {
-      acc[team.id] = team.name;
-      return acc;
-    }, {} as Record<string, string>);
-
-    // 結果を構築
-    return Object.entries(teamGroups).map(([teamId, users]) => {
-      // 学年ごとにグループ化（期生を学年に変換）
-      const gradeGroups = users.reduce((acc, user) => {
-        const kiseiNumber = user.grade || 10; // デフォルトは10期生
-        const actualGrade = convertKiseiiToGrade(kiseiNumber);
-        if (!acc[actualGrade]) {
-          acc[actualGrade] = [];
-        }
-        acc[actualGrade].push(user);
-        return acc;
-      }, {} as Record<number, AppUser[]>);
-
-      const gradeStats = Object.entries(gradeGroups).map(([gradeStr, gradeUsers]) => ({
-        grade: parseInt(gradeStr),
-        count: gradeUsers.length,
-        users: gradeUsers.map(u => ({ ...u, isPresent: true }))
-      })).sort((a, b) => b.grade - a.grade); // 学年の降順
-
-      return {
-        teamId,
-        teamName: teamMap[teamId],
-        gradeStats
-      };
-    });
-  } catch (error) {
-    console.error('ログデータからの統計計算エラー:', error);
-    return [];
-  }
-};
-
-// 期生から学年への変換ヘルパー関数
-// 2025年時点: 8期生=3年生, 9期生=2年生, 10期生=1年生
-const convertKiseiiToGrade = (kiseiNumber: number, currentYear: number = new Date().getFullYear()): number => {
-  // 基準年（2025年）における期生と学年の対応
-  const baseYear = 2025;
-  const baseKiseiToGrade: Record<number, number> = {
-    8: 3,  // 8期生 = 3年生
-    9: 2,  // 9期生 = 2年生
-    10: 1, // 10期生 = 1年生
-  };
-
-  // 年が変わった場合の調整
-  const yearDifference = currentYear - baseYear;
-  
-  if (baseKiseiToGrade[kiseiNumber]) {
-    const adjustedGrade = baseKiseiToGrade[kiseiNumber] + yearDifference;
-    // 学年は1-3の範囲内に制限
-    return Math.max(1, Math.min(3, adjustedGrade));
-  }
-
-  // 基準データにない場合の推定計算
-  // 10期生を基準として、期生が1つ下がると学年が1つ上がる
-  const baseKisei = 10; // 10期生 = 1年生（2025年基準）
-  const estimatedGrade = 1 + (baseKisei - kiseiNumber) + yearDifference;
-  
-  return Math.max(1, Math.min(3, estimatedGrade));
-};
-
-// 学年から期生への逆変換ヘルパー関数
-const convertGradeToKisei = (grade: number, currentYear: number = new Date().getFullYear()): number => {
-  // 2025年基準での逆変換
-  const baseYear = 2025;
-  const baseGradeToKisei: Record<number, number> = {
-    3: 8,  // 3年生 = 8期生
-    2: 9,  // 2年生 = 9期生
-    1: 10, // 1年生 = 10期生
-  };
-
-  const yearDifference = currentYear - baseYear;
-  
-  if (baseGradeToKisei[grade]) {
-    return baseGradeToKisei[grade] - yearDifference;
-  }
-
-  // 基準データにない場合の推定計算
-  return 10 - (grade - 1) - yearDifference;
-};
 
 // 期生データを学年表示用に変換する関数
 export const formatKiseiAsGrade = (kiseiNumber: number): string => {
@@ -709,6 +734,18 @@ export const calculateMonthlyAttendanceStats = async (
   }
 };
 
+// 特定日の班別・学年別出席人数を取得（従来版）
+export const getDailyAttendanceStats = async (
+  targetDate: Date
+): Promise<{
+  teamId: string;
+  teamName?: string;
+  gradeStats: { grade: number; count: number; users: AppUser[] }[];
+}[]> => {
+  return calculateDailyAttendanceFromLogs(targetDate);
+};
+
+
 // 特定日の班別・学年別出席人数を取得（新しいデータ構造）
 export const getDailyAttendanceStatsV2 = async (
   targetDate: Date
@@ -747,175 +784,7 @@ export const getDailyAttendanceStatsV2 = async (
   }
 };
 
-// 特定日の班別・学年別出席人数を取得（従来版）
-export const getDailyAttendanceStats = async (
-  targetDate: Date
-): Promise<{
-  teamId: string;
-  teamName?: string;
-  gradeStats: { grade: number; count: number; users: AppUser[] }[];
-}[]> => {
-  return calculateDailyAttendanceFromLogs(targetDate);
-};
 
-// 全ユーザー一覧を取得（管理者専用）
-export const getAllUsers = async (): Promise<AppUser[]> => {
-  try {
-    const usersRef = collection(db, 'users');
-    const snapshot = await getDocs(usersRef);
-    
-    return snapshot.docs.map(doc => ({
-      uid: doc.id,
-      ...doc.data()
-    } as AppUser));
-  } catch (error) {
-    console.error('全ユーザー取得エラー:', error);
-    return [];
-  }
-};
-
-// 特定ユーザーの出席記録を取得
-export const getUserAttendanceRecords = async (uid: string, days: number = 30): Promise<any[]> => {
-  try {
-    // 過去N日分の日付範囲を計算
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - days);
-
-    // 出勤ログを取得
-    const attendanceLogsRef = collection(db, 'attendance_logs');
-    const q = query(
-      attendanceLogsRef,
-      where('uid', '==', uid),
-      orderBy('timestamp', 'desc')
-    );
-    
-    const snapshot = await getDocs(q);
-    const logs = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    // 日付別に出席記録を整理
-    const attendanceByDate: { [date: string]: { checkIn?: Date, checkOut?: Date } } = {};
-    
-    logs.forEach((log: any) => {
-      const timestamp = safeTimestampToDate(log.timestamp);
-      if (timestamp && timestamp >= startDate) {
-        const dateStr = timestamp.toISOString().split('T')[0];
-        
-        if (!attendanceByDate[dateStr]) {
-          attendanceByDate[dateStr] = {};
-        }
-        
-        if (log.type === 'entry') {
-          attendanceByDate[dateStr].checkIn = timestamp;
-        } else if (log.type === 'exit') {
-          attendanceByDate[dateStr].checkOut = timestamp;
-        }
-      }
-    });
-
-    // 出席記録配列に変換
-    const attendanceRecords = Object.entries(attendanceByDate).map(([date, record]) => ({
-      date,
-      checkInTime: record.checkIn?.toISOString(),
-      checkOutTime: record.checkOut?.toISOString()
-    }));
-
-    return attendanceRecords.sort((a, b) => b.date.localeCompare(a.date));
-  } catch (error) {
-    console.error('出席記録取得エラー:', error);
-    // インデックスエラーの場合は空の配列を返す
-    if (error instanceof Error && error.message.includes('index')) {
-      console.warn('インデックス未作成のため、出席記録を取得できません。Firebaseコンソールでインデックスを作成してください。');
-    }
-    return [];
-  }
-};
-
-// 今日の全体出席状況を取得（旧プロジェクト方式）
-export const getTodayAttendanceStats = async (): Promise<any> => {
-  try {
-    // 今日の日付を取得（日本時間）
-    const currentDate = new Date();
-    const jstNow = new Date(currentDate.getTime() + (9 * 60 * 60 * 1000));
-    const today = jstNow.toISOString().split('T')[0];
-    const todayStart = new Date(today);
-    const todayEnd = new Date(today);
-    todayEnd.setDate(todayEnd.getDate() + 1);
-    
-    // 全ユーザーを取得
-    const allUsers = await getAllUsers();
-    console.log('getTodayAttendanceStats: 全ユーザー数:', allUsers.length);
-    
-    if (allUsers.length === 0) {
-      return {
-        date: today,
-        totalUsers: 0,
-        presentUsers: 0,
-        statsByGrade: {}
-      };
-    }
-    
-    // 今日の出勤ログを取得
-    const logsRef = collection(db, 'attendance_logs');
-    const logsSnapshot = await getDocs(logsRef);
-    console.log('getTodayAttendanceStats: 総ログ数:', logsSnapshot.docs.length);
-    
-    // 今日の出勤者を特定
-    const todayAttendees = new Set<string>();
-    let todayLogsCount = 0;
-    
-    logsSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      const timestamp = safeTimestampToDate(data.timestamp);
-      
-      if (timestamp && timestamp >= todayStart && timestamp < todayEnd) {
-        todayLogsCount++;
-        if (data.type === 'entry') {
-          todayAttendees.add(data.uid);
-          console.log('getTodayAttendanceStats: 今日の出勤:', data.uid, timestamp.toLocaleString('ja-JP'));
-        }
-      }
-    });
-    
-    console.log('getTodayAttendanceStats: 今日のログ数:', todayLogsCount);
-    console.log('getTodayAttendanceStats: 今日の出勤者数:', todayAttendees.size);
-    
-    // 学年別統計を作成
-    const statsByGrade: { [grade: number]: { total: number, present: number, users: AppUser[] } } = {};
-    
-    allUsers.forEach(user => {
-      const grade = user.grade;
-      if (!statsByGrade[grade]) {
-        statsByGrade[grade] = { total: 0, present: 0, users: [] };
-      }
-      
-      statsByGrade[grade].total++;
-      statsByGrade[grade].users.push(user);
-      
-      if (todayAttendees.has(user.uid)) {
-        statsByGrade[grade].present++;
-      }
-    });
-    
-    return {
-      date: today,
-      totalUsers: allUsers.length,
-      presentUsers: todayAttendees.size,
-      statsByGrade
-    };
-  } catch (error) {
-    console.error('今日の出席統計取得エラー:', error);
-    return {
-      date: new Date().toISOString().split('T')[0],
-      totalUsers: 0,
-      presentUsers: 0,
-      statsByGrade: {}
-    };
-  }
-};
 
 // ユーザー情報を更新（管理者専用）
 export const updateUser = async (uid: string, updates: Partial<AppUser>): Promise<boolean> => {
@@ -1492,28 +1361,6 @@ export const getTeamMembers = async (teamId: string): Promise<AppUser[]> => {
   }
 };
 
-// チーム一覧を取得（重複を許容しないように修正）
-export const getAllTeams = async (): Promise<Team[]> => {
-  try {
-    const teamsRef = collection(db, 'teams');
-    const snapshot = await getDocs(teamsRef);
-    
-    // IDの重複を排除
-    const teamMap = new Map<string, Team>();
-    snapshot.docs.forEach(doc => {
-      const team = {
-        id: doc.id,
-        ...doc.data() as Omit<Team, 'id'>
-      } as Team;
-      teamMap.set(doc.id, team);
-    });
-    
-    return Array.from(teamMap.values());
-  } catch (error) {
-    console.error('Error fetching teams:', error);
-    throw error;
-  }
-};
 
 // 特定チームの勤怠ログを取得
 export const getTeamAttendanceLogs = async (teamId: string, limitCount: number = 50): Promise<AttendanceLog[]> => {
@@ -1548,4 +1395,173 @@ export const getTeamAttendanceLogs = async (teamId: string, limitCount: number =
 // ログIDを生成するヘルパー関数
 export const generateAttendanceLogId = (uid: string): string => {
   return `${uid}_${Date.now()}`;
+};
+
+// ユーザーの出席記録を取得
+export const getUserAttendanceRecords = async (uid: string, days: number = 30): Promise<any[]> => {
+  try {
+    // 過去N日分の日付範囲を計算
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - days);
+
+    // 出勤ログを取得
+    const attendanceLogsRef = collection(db, 'attendance_logs');
+    const q = query(
+      attendanceLogsRef,
+      where('uid', '==', uid),
+      orderBy('timestamp', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    const logs = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    // 日付別に出席記録を整理
+    const attendanceByDate: { [date: string]: { checkIn?: Date, checkOut?: Date } } = {};
+    
+    logs.forEach((log: any) => {
+      const timestamp = safeTimestampToDate(log.timestamp);
+      if (timestamp && timestamp >= startDate) {
+        const dateStr = timestamp.toISOString().split('T')[0];
+        
+        if (!attendanceByDate[dateStr]) {
+          attendanceByDate[dateStr] = {};
+        }
+        
+        if (log.type === 'entry') {
+          attendanceByDate[dateStr].checkIn = timestamp;
+        } else if (log.type === 'exit') {
+          attendanceByDate[dateStr].checkOut = timestamp;
+        }
+      }
+    });
+
+    // 出席記録配列に変換
+    const attendanceRecords = Object.entries(attendanceByDate).map(([date, record]) => ({
+      date,
+      checkInTime: record.checkIn?.toISOString(),
+      checkOutTime: record.checkOut?.toISOString()
+    }));
+
+    return attendanceRecords.sort((a, b) => b.date.localeCompare(a.date));
+  } catch (error) {
+    console.error('出席記録取得エラー:', error);
+    // インデックスエラーの場合は空の配列を返す
+    if (error instanceof Error && error.message.includes('index')) {
+      console.warn('インデックス未作成のため、出席記録を取得できません。Firebaseコンソールでインデックスを作成してください。');
+    }
+    return [];
+  }
+};
+
+// 今日の全体出席状況を取得（旧プロジェクト方式）
+export const getTodayAttendanceStats = async (): Promise<any> => {
+  try {
+    // 今日の日付を取得（日本時間）
+    const currentDate = new Date();
+    const jstNow = new Date(currentDate.getTime() + (9 * 60 * 60 * 1000));
+    const today = jstNow.toISOString().split('T')[0];
+    const todayStart = new Date(today);
+    const todayEnd = new Date(today);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+    
+    // 全ユーザーを取得
+    const allUsers = await getAllUsers();
+    console.log('getTodayAttendanceStats: 全ユーザー数:', allUsers.length);
+    
+    if (allUsers.length === 0) {
+      return {
+        date: today,
+        totalUsers: 0,
+        presentUsers: 0,
+        statsByGrade: {}
+      };
+    }
+    
+    // 今日の出勤ログを取得
+    const logsRef = collection(db, 'attendance_logs');
+    const logsSnapshot = await getDocs(logsRef);
+    console.log('getTodayAttendanceStats: 総ログ数:', logsSnapshot.docs.length);
+    
+    // 今日の出勤者を特定
+    const todayAttendees = new Set<string>();
+    let todayLogsCount = 0;
+    
+    logsSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const timestamp = safeTimestampToDate(data.timestamp);
+      
+      if (timestamp && timestamp >= todayStart && timestamp < todayEnd) {
+        todayLogsCount++;
+        if (data.type === 'entry') {
+          todayAttendees.add(data.uid);
+          console.log('getTodayAttendanceStats: 今日の出勤:', data.uid, timestamp.toLocaleString('ja-JP'));
+        }
+      }
+    });
+    
+    console.log('getTodayAttendanceStats: 今日のログ数:', todayLogsCount);
+    console.log('getTodayAttendanceStats: 今日の出勤者数:', todayAttendees.size);
+    
+    // 学年別統計を作成
+    const statsByGrade: { [grade: number]: { total: number, present: number, users: AppUser[] } } = {};
+    
+    allUsers.forEach(user => {
+      const grade = user.grade;
+      if (!statsByGrade[grade]) {
+        statsByGrade[grade] = { total: 0, present: 0, users: [] };
+      }
+      
+      statsByGrade[grade].total++;
+      statsByGrade[grade].users.push(user);
+      
+      if (todayAttendees.has(user.uid)) {
+        statsByGrade[grade].present++;
+      }
+    });
+    
+    return {
+      date: today,
+      totalUsers: allUsers.length,
+      presentUsers: todayAttendees.size,
+      statsByGrade
+    };
+  } catch (error) {
+    console.error('今日の出席統計取得エラー:', error);
+    return {
+      date: new Date().toISOString().split('T')[0],
+      totalUsers: 0,
+      presentUsers: 0,
+      statsByGrade: {}
+    };
+  }
+};
+
+// リンク要求を作成
+export const createLinkRequest = async (token: string): Promise<string> => {
+  const docRef = await addDoc(collection(db, 'link_requests'), {
+    token,
+    status: 'waiting',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return docRef.id;
+};
+
+// トークンの状態を監視
+export const watchTokenStatus = (
+  token: string,
+  callback: (status: string, data?: LinkRequest) => void
+) => {
+  const q = query(collection(db, 'link_requests'), where('token', '==', token), limit(1));
+  
+  return onSnapshot(q, (snapshot) => {
+    if (!snapshot.empty) {
+      const docData = snapshot.docs[0].data() as LinkRequest;
+      callback(docData.status, docData);
+    }
+  });
 };
