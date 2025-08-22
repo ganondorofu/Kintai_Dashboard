@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ChevronRight,
   Users,
-  LogOut
+  LogOut,
+  Shield,
 } from 'lucide-react';
 import { getDailyAttendanceStatsV2, getAllTeams, formatKisei } from '@/lib/data-adapter';
 import type { AppUser, Team } from '@/types';
@@ -188,6 +189,21 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
             <Home className="mr-3 h-5 w-5 flex-shrink-0" />
             個人ダッシュボード
           </Link>
+
+          {isAdmin && (
+            <Link
+              href="/admin"
+              onClick={onClose}
+              className={`group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                pathname.startsWith('/admin')
+                  ? 'bg-purple-50 text-purple-600 border border-purple-200'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <Shield className="mr-3 h-5 w-5 flex-shrink-0" />
+              管理者ダッシュボード
+            </Link>
+          )}
         </nav>
 
         {/* 班一覧 */}
