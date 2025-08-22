@@ -1,31 +1,77 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth, differenceInMinutes, subMonths, addMonths } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { getUserAttendanceLogs } from '@/lib/data-adapter';
+import { getUserAttendanceLogsV2, safeTimestampToDate } from '@/lib/data-adapter';
 import type { AttendanceLog, AppUser } from '@/types';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface AttendanceLogsProps {
   user: AppUser;
-  startDate?: Date;
-  endDate?: Date;
 }
 
-export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ 
-  user, 
-  startDate, 
-  endDate 
-}) => {
-  const [logs, setLogs] = useState<AttendanceLog[]>([]);
+interface ProcessedLog {
+  date: string;
+  checkInTime: Date | null;
+  checkOutTime: Date | null;
+  workDuration: string | null;
+}
+
+export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user }) => {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [logs, setLogs] = useState<ProcessedLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchLogs = async () => {
       setLoading(true);
       try {
-        const fetchedLogs = await getUserAttendanceLogs(user.uid, startDate, endDate);
-        setLogs(fetchedLogs);
+        const monthStart = startOfMonth(currentMonth);
+        const monthEnd = endOfMonth(currentMonth);
+        const fetchedLogs = await getUserAttendanceLogsV2(user.uid, monthStart, monthEnd, 1000);
+        
+        const logsByDate: { [key: string]: AttendanceLog[] } = {};
+        fetchedLogs.forEach(log => {
+          const logDate = safeTimestampToDate(log.timestamp);
+          if (logDate) {
+            const dateKey = format(logDate, 'yyyy-MM-dd');
+            if (!logsByDate[dateKey]) {
+              logsByDate[dateKey] = [];
+            }
+            logsByDate[dateKey].push(log);
+          }
+        });
+
+        const processed: ProcessedLog[] = Object.keys(logsByDate).map(dateKey => {
+          const dayLogs = logsByDate[dateKey];
+          const entries = dayLogs.filter(l => l.type === 'entry').map(l => safeTimestampToDate(l.timestamp)).filter(Boolean) as Date[];
+          const exits = dayLogs.filter(l => l.type === 'exit').map(l => safeTimestampToDate(l.timestamp)).filter(Boolean) as Date[];
+          
+          const checkInTime = entries.length > 0 ? new Date(Math.min(...entries.map(d => d.getTime()))) : null;
+          const checkOutTime = exits.length > 0 ? new Date(Math.max(...exits.map(d => d.getTime()))) : null;
+          
+          let workDuration = null;
+          if (checkInTime && checkOutTime && checkOutTime > checkInTime) {
+            const minutes = differenceInMinutes(checkOutTime, checkInTime);
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = minutes % 60;
+            workDuration = `${hours}時間${remainingMinutes}分`;
+          }
+
+          return {
+            date: dateKey,
+            checkInTime,
+            checkOutTime,
+            workDuration,
+          };
+        }).sort((a, b) => b.date.localeCompare(a.date));
+
+        setLogs(processed);
+
       } catch (error) {
         console.error('勤怠ログ取得エラー:', error);
       } finally {
@@ -34,69 +80,75 @@ export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({
     };
 
     fetchLogs();
-  }, [user.uid, startDate, endDate]);
+  }, [user.uid, currentMonth]);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
+  const handlePrevMonth = () => {
+    setCurrentMonth(subMonths(currentMonth, 1));
+  };
 
-  if (logs.length === 0) {
-    return (
-      <div className="text-center p-8 text-gray-500">
-        指定された期間の勤怠記録はありません
-      </div>
-    );
-  }
+  const handleNextMonth = () => {
+    setCurrentMonth(addMonths(currentMonth, 1));
+  };
+
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold">勤怠記録</h3>
-      
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                日時
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                種別
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                カードID
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {logs.map((log) => (
-              <tr key={log.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {log.timestamp && typeof log.timestamp.toDate === 'function' 
-                    ? format(log.timestamp.toDate(), 'yyyy年MM月dd日 HH:mm:ss', { locale: ja })
-                    : '不明'
-                  }
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    log.type === 'entry' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {log.type === 'entry' ? '入室' : '退室'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {log.cardId || '-'}
-                </td>
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>月間出退勤履歴</CardTitle>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handlePrevMonth}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="font-semibold text-lg w-32 text-center">
+            {format(currentMonth, 'yyyy年 M月', { locale: ja })}
+          </span>
+          <Button variant="outline" size="icon" onClick={handleNextMonth}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+      {loading ? (
+        <div className="flex justify-center p-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        </div>
+      ) : logs.length === 0 ? (
+        <div className="text-center p-8 text-gray-500">
+          この月の勤怠記録はありません
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日付</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">出勤時間</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">退勤時間</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">勤務時間</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {logs.map((log) => (
+                <tr key={log.date}>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                     {format(new Date(log.date), 'MM/dd(E)', { locale: ja })}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500 font-mono">
+                    {log.checkInTime ? format(log.checkInTime, 'HH:mm') : '-'}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500 font-mono">
+                    {log.checkOutTime ? format(log.checkOutTime, 'HH:mm') : '-'}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-500 font-mono">
+                    {log.workDuration || '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      </CardContent>
+    </Card>
   );
 };

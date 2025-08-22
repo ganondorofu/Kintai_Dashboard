@@ -177,45 +177,6 @@ export function AttendanceSystem({ user }: AttendanceSystemProps) {
           </div>
         </CardContent>
       </Card>
-
-      {/* 月間出退勤履歴 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <History className="h-5 w-5" />
-            月間出退勤履歴
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {processedLogs.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">
-              過去1ヶ月の勤怠記録がありません
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="grid grid-cols-4 gap-2 text-xs text-muted-foreground font-medium px-2">
-                <div>日付</div>
-                <div className="text-center">出勤</div>
-                <div className="text-center">退勤</div>
-                <div className="text-right">勤務時間</div>
-              </div>
-              <div className="space-y-2">
-              {processedLogs.map((log) => (
-                <div key={log.date} className="grid grid-cols-4 gap-2 items-center p-2 bg-gray-50 rounded-lg text-sm">
-                  <div>{format(new Date(log.date), 'MM/dd(E)', {locale: ja})}</div>
-                  <div className="text-center font-mono">{log.checkInTime ? format(log.checkInTime, 'HH:mm') : '-'}</div>
-                  <div className="text-center font-mono">{log.checkOutTime ? format(log.checkOutTime, 'HH:mm') : '-'}</div>
-                  <div className="text-right font-mono">{log.workDuration || '-'}</div>
-                </div>
-              ))}
-              </div>
-               <p className="text-xs text-right text-gray-400 mt-2">
-                最新{processedLogs.length}件の記録
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

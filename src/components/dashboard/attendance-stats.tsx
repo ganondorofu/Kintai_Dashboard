@@ -3,45 +3,79 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getUserAttendanceLogsV2, getWorkdaysInRange, getDailyAttendanceStatsV2, safeTimestampToDate } from '@/lib/data-adapter';
+import { getUserAttendanceLogsV2, getWorkdaysInRange, safeTimestampToDate } from '@/lib/data-adapter';
 import type { AppUser, AttendanceLog } from '@/types';
-import { Calendar, Clock, TrendingUp, Users } from 'lucide-react';
-import { format, startOfDay, endOfDay, subDays } from 'date-fns';
+import { Calendar, Clock, TrendingUp, History } from 'lucide-react';
+import { format, subDays, differenceInMinutes, startOfMonth, endOfMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
 interface AttendanceStatsProps {
   user: AppUser;
 }
 
-interface DayStats {
-  date: Date;
-  hasEntry: boolean;
-  hasExit: boolean;
-  entryTime?: Date;
-  exitTime?: Date;
-  workingHours?: number;
-}
-
 export function AttendanceStats({ user }: AttendanceStatsProps) {
-  const [userLogs, setUserLogs] = useState<AttendanceLog[]>([]);
-  const [workdays, setWorkdays] = useState<Date[]>([]);
-  const [teamStats, setTeamStats] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    lastCheckInDate: '-',
+    monthlyAttendance: 0,
+    totalAttendance: 0,
+    attendanceRate: 0,
+    averageWorkMinutes: 0,
+  });
   const [loading, setLoading] = useState(true);
 
-  const thirtyDaysAgo = subDays(new Date(), 30);
-  const today = new Date();
-
-  const loadStatsData = useCallback(async () => {
+  const calculateStats = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const [fetchedLogs, fetchedWorkdays, fetchedTeamStats] = await Promise.all([
-        getUserAttendanceLogsV2(user.uid, thirtyDaysAgo, today, 1000), // 30日分なので十分な数を取得
-        getWorkdaysInRange(thirtyDaysAgo, today),
-        getDailyAttendanceStatsV2(new Date()),
-      ]);
-      setUserLogs(fetchedLogs);
-      setWorkdays(fetchedWorkdays);
-      setTeamStats(fetchedTeamStats);
+        const now = new Date();
+        const thirtyDaysAgo = subDays(now, 30);
+        const currentMonthStart = startOfMonth(now);
+        
+        const [allTimeLogs, thirtyDayLogs, workdays] = await Promise.all([
+          getUserAttendanceLogsV2(user.uid, undefined, undefined, 9999),
+          getUserAttendanceLogsV2(user.uid, thirtyDaysAgo, now, 1000),
+          getWorkdaysInRange(thirtyDaysAgo, now)
+        ]);
+
+        const allTimeDates = new Set(allTimeLogs.filter(log => log.type === 'entry').map(log => format(safeTimestampToDate(log.timestamp)!, 'yyyy-MM-dd')));
+
+        const thirtyDayDates = new Set(thirtyDayLogs.filter(log => log.type === 'entry').map(log => format(safeTimestampToDate(log.timestamp)!, 'yyyy-MM-dd')));
+
+        const monthlyLogs = allTimeLogs.filter(log => {
+            const logDate = safeTimestampToDate(log.timestamp);
+            return logDate && logDate >= currentMonthStart && logDate <= now;
+        });
+        const monthlyDates = new Set(monthlyLogs.filter(log => log.type === 'entry').map(log => format(safeTimestampToDate(log.timestamp)!, 'yyyy-MM-dd')));
+
+        const workDurations: number[] = [];
+        const logsByDate = new Map<string, AttendanceLog[]>();
+        thirtyDayLogs.forEach(log => {
+            const dateKey = format(safeTimestampToDate(log.timestamp)!, 'yyyy-MM-dd');
+            if (!logsByDate.has(dateKey)) logsByDate.set(dateKey, []);
+            logsByDate.get(dateKey)!.push(log);
+        });
+
+        logsByDate.forEach(dayLogs => {
+            const entries = dayLogs.filter(l => l.type === 'entry').map(l => safeTimestampToDate(l.timestamp)!).sort((a,b) => a.getTime() - b.getTime());
+            const exits = dayLogs.filter(l => l.type === 'exit').map(l => safeTimestampToDate(l.timestamp)!).sort((a,b) => a.getTime() - b.getTime());
+            if (entries.length > 0 && exits.length > 0) {
+                const duration = differenceInMinutes(exits[exits.length - 1], entries[0]);
+                if (duration > 0) workDurations.push(duration);
+            }
+        });
+
+        const totalMinutes = workDurations.reduce((acc, cur) => acc + cur, 0);
+        const averageWorkMinutes = workDurations.length > 0 ? totalMinutes / workDurations.length : 0;
+        const attendanceRate = workdays.length > 0 ? (thirtyDayDates.size / workdays.length) * 100 : 0;
+        const lastCheckInDate = allTimeDates.size > 0 ? format(new Date(Math.max(...Array.from(allTimeDates).map(d => new Date(d).getTime()))), 'yyyy/MM/dd') : '-';
+
+        setStats({
+            lastCheckInDate,
+            monthlyAttendance: monthlyDates.size,
+            totalAttendance: allTimeDates.size,
+            attendanceRate,
+            averageWorkMinutes,
+        });
+
     } catch (error) {
       console.error('統計データの計算に失敗:', error);
     } finally {
@@ -50,130 +84,57 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
   }, [user.uid]);
 
   useEffect(() => {
-    loadStatsData();
-  }, [loadStatsData]);
+    calculateStats();
+  }, [calculateStats]);
 
-  // 月の集計値
-  const summary = {
-    attendedDays: 0,
-    totalHours: 0,
-    averageHours: 0
-  };
-
-  if(userLogs.length > 0) {
-    const attendedDates = new Set<string>();
-    const workDurations: number[] = [];
-    const logsByDate = new Map<string, AttendanceLog[]>();
-
-    userLogs.forEach(log => {
-        const logDate = safeTimestampToDate(log.timestamp);
-        if (!logDate) return;
-
-        const dateKey = format(logDate, 'yyyy-MM-dd');
-        if (!logsByDate.has(dateKey)) {
-            logsByDate.set(dateKey, []);
-        }
-        logsByDate.get(dateKey)!.push(log);
-        attendedDates.add(dateKey);
-    });
-    
-    summary.attendedDays = attendedDates.size;
-
-    logsByDate.forEach((dayLogs) => {
-        const entries = dayLogs.filter(l => l.type === 'entry').sort((a,b) => (safeTimestampToDate(a.timestamp)?.getTime() || 0) - (safeTimestampToDate(b.timestamp)?.getTime() || 0));
-        const exits = dayLogs.filter(l => l.type === 'exit').sort((a,b) => (safeTimestampToDate(a.timestamp)?.getTime() || 0) - (safeTimestampToDate(b.timestamp)?.getTime() || 0));
-
-        if (entries.length > 0 && exits.length > 0) {
-            const firstEntry = safeTimestampToDate(entries[0].timestamp)?.getTime() || 0;
-            const lastExit = safeTimestampToDate(exits[exits.length - 1].timestamp)?.getTime() || 0;
-            if(lastExit > firstEntry) {
-                workDurations.push((lastExit - firstEntry) / (1000 * 60 * 60));
-            }
-        }
-    });
-    
-    summary.totalHours = workDurations.reduce((acc, cur) => acc + cur, 0);
-    if(workDurations.length > 0) {
-        summary.averageHours = summary.totalHours / workDurations.length;
-    }
+  const formatDuration = (minutes: number) => {
+    if (minutes === 0) return '0時間0分';
+    const h = Math.floor(minutes / 60);
+    const m = Math.round(minutes % 60);
+    return `${h}時間${m}分`;
   }
-
-
-  // 今月の出席率
-  const attendanceRate = workdays.length > 0
-    ? (summary.attendedDays / workdays.length) * 100
-    : 0;
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-          {[...Array(4)].map((_, i) => <Card key={i}><CardContent className="p-6 h-28 animate-pulse bg-gray-200 rounded-lg"></CardContent></Card>)}
-        </div>
-        <Card><CardContent className="p-6 h-96 animate-pulse bg-gray-200 rounded-lg"></CardContent></Card>
-      </div>
-    )
+        <Card>
+            <CardHeader><CardTitle>勤務状況</CardTitle></CardHeader>
+            <CardContent className="h-64 animate-pulse bg-gray-100 rounded-b-lg" />
+        </Card>
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+    <div className='space-y-6'>
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Calendar className="h-8 w-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">出席日数 (過去30日)</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {summary.attendedDays} / {workdays.length} 日
-                </p>
-              </div>
-            </div>
-          </CardContent>
+            <CardHeader><CardTitle>勤務状況</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+                <div className='flex justify-between items-center text-sm'>
+                    <span className='text-muted-foreground'>前回出勤日</span>
+                    <span className='font-semibold'>{stats.lastCheckInDate}</span>
+                </div>
+                <div className='flex justify-between items-center text-sm'>
+                    <span className='text-muted-foreground'>今月の出勤日数</span>
+                    <span className='font-semibold'>{stats.monthlyAttendance}日</span>
+                </div>
+                <div className='flex justify-between items-center text-sm'>
+                    <span className='text-muted-foreground'>累計出勤日数</span>
+                    <span className='font-semibold'>{stats.totalAttendance}日</span>
+                </div>
+            </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <TrendingUp className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">出席率 (対活動日)</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {attendanceRate.toFixed(1)}%
-                </p>
-              </div>
-            </div>
-          </CardContent>
+            <CardHeader><CardTitle>勤務統計 (過去30日)</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+                <div className='flex justify-between items-center text-sm'>
+                    <span className='text-muted-foreground'>出勤率 (対活動日)</span>
+                    <span className='font-semibold'>{stats.attendanceRate.toFixed(1)}%</span>
+                </div>
+                <div className='flex justify-between items-center text-sm'>
+                    <span className='text-muted-foreground'>平均勤務時間</span>
+                    <span className='font-semibold'>{formatDuration(stats.averageWorkMinutes)}</span>
+                </div>
+            </CardContent>
         </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Clock className="h-8 w-8 text-purple-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">総活動時間</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {summary.totalHours.toFixed(1)}h
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Clock className="h-8 w-8 text-orange-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">平均活動時間</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {summary.averageHours.toFixed(1)}h
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
