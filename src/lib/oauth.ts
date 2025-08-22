@@ -1,3 +1,9 @@
+
+import { updateDoc, query, collection, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase';
+import type { LinkRequest } from '@/types';
+
+
 // GitHub OAuth 直接実装
 export interface GitHubUser {
   id: number;
@@ -124,5 +130,21 @@ export const validateToken = async (accessToken: string): Promise<boolean> => {
     return response.ok;
   } catch (error) {
     return false;
+  }
+};
+
+export const updateLinkRequestStatus = async (token: string, status: 'opened' | 'linked' | 'done', data?: Partial<LinkRequest>): Promise<void> => {
+  const q = query(collection(db, 'link_requests'), where('token', '==', token));
+  const snapshot = await getDocs(q);
+
+  if (!snapshot.empty) {
+      const docRef = snapshot.docs[0].ref;
+      await updateDoc(docRef, {
+          status,
+          ...data,
+          updatedAt: serverTimestamp(),
+      });
+  } else {
+      console.warn(`Link request with token ${token} not found.`);
   }
 };

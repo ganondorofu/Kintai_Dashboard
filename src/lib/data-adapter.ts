@@ -1,4 +1,5 @@
 
+
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
@@ -1361,6 +1362,22 @@ export const createLinkRequest = async (token: string): Promise<string> => {
   return docRef.id;
 };
 
+export const updateLinkRequestStatus = async (token: string, status: 'opened' | 'linked', data?: Partial<LinkRequest>): Promise<void> => {
+    const q = query(collection(db, 'link_requests'), where('token', '==', token));
+    const snapshot = await getDocs(q);
+
+    if (!snapshot.empty) {
+        const docRef = snapshot.docs[0].ref;
+        await updateDoc(docRef, {
+            status,
+            ...data,
+            updatedAt: serverTimestamp(),
+        });
+    } else {
+        console.warn(`Link request with token ${token} not found.`);
+    }
+};
+
 export const watchTokenStatus = (
   token: string,
   callback: (status: string, data?: LinkRequest) => void
@@ -1495,8 +1512,7 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     const userId = userDoc.id;
 
     // ユーザーの現在の勤怠ステータスを確認
-    const currentStatus = userData.status || 'inactive';
-    const isCurrentlyActive = currentStatus === 'active';
+    const isCurrentlyActive = userData.status === 'active';
     
     const newStatus = isCurrentlyActive ? 'inactive' : 'active';
     const logType: 'entry' | 'exit' = isCurrentlyActive ? 'exit' : 'entry';
@@ -1535,3 +1551,4 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     return { status: 'error', message: 'エラーが発生しました', subMessage: 'もう一度お試しください' };
   }
 };
+
