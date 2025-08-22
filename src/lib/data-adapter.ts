@@ -1,6 +1,7 @@
 
 
 
+
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
@@ -57,10 +58,10 @@ export const safeTimestampToDate = (timestamp: any): Date | null => {
 // 新しいデータ構造用のヘルパー関数
 const getAttendancePath = (date: Date): { year: string, month: string, day: string, fullPath: string } => {
   // JST (UTC+9) で日付を取得
-  const jstDate = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-  const year = jstDate.getUTCFullYear().toString();
-  const month = (jstDate.getUTCMonth() + 1).toString().padStart(2, '0');
-  const day = jstDate.getUTCDate().toString().padStart(2, '0');
+  const jstDate = new Date(date.getTime());
+  const year = jstDate.getFullYear().toString();
+  const month = (jstDate.getMonth() + 1).toString().padStart(2, '0');
+  const day = jstDate.getDate().toString().padStart(2, '0');
   
   return {
     year,
@@ -1450,4 +1451,62 @@ export const getWorkdaysInRange = async (startDate: Date, endDate: Date): Promis
     });
 
     return Array.from(workdays).map(dateStr => new Date(dateStr));
+};
+
+export const handleAttendanceByCardId = async (cardId: string): Promise<{
+  status: 'success' | 'error' | 'unregistered';
+  message: string;
+  subMessage?: string;
+}> => {
+  try {
+    const usersRef = collection(db, 'users');
+    const userQuery = query(usersRef, where('cardId', '==', cardId), limit(1));
+    const userSnapshot = await getDocs(userQuery);
+
+    if (userSnapshot.empty) {
+      return { status: 'unregistered', message: '未登録のカードです', subMessage: '登録するには「/」キーを押してください' };
+    }
+
+    const userDoc = userSnapshot.docs[0];
+    const userData = userDoc.data() as AppUser;
+    const userId = userDoc.id;
+
+    // ユーザーの現在の勤怠ステータスを確認
+    const currentStatus = userData.status || 'inactive'; // 'active' or 'inactive'
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const logType: 'entry' | 'exit' = newStatus === 'active' ? 'entry' : 'exit';
+
+    const batch = writeBatch(db);
+
+    // 新しい勤怠ログを attendances に作成
+    const now = new Date();
+    const { year, month, day } = getAttendancePath(now);
+    const dateKey = `${year}-${month}-${day}`;
+    const logId = generateAttendanceLogId(userId);
+    const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
+
+    batch.set(newLogRef, {
+      uid: userId,
+      cardId: cardId,
+      type: logType,
+      timestamp: serverTimestamp(),
+    });
+
+    // ユーザーのステータスと最終活動時刻を更新
+    const userDocRef = doc(db, 'users', userId);
+    batch.update(userDocRef, {
+      status: newStatus,
+      last_activity: serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    const userName = `${userData.lastname} ${userData.firstname}`;
+    const actionMsg = logType === 'entry' ? '出勤を記録しました' : '退勤を記録しました';
+
+    return { status: 'success', message: `ようこそ、${userName}さん`, subMessage: actionMsg };
+  } catch (err) {
+    console.error("勤怠記録エラー:", err);
+    return { status: 'error', message: 'エラーが発生しました', subMessage: 'もう一度お試しください' };
+  }
 };
