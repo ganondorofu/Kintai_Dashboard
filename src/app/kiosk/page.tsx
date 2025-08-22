@@ -2,8 +2,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { addDoc, collection, serverTimestamp, query, where, orderBy, limit, getDocs, onSnapshot, writeBatch, doc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { handleAttendanceByCardId } from '@/lib/data-adapter';
+import { createLinkRequest, watchTokenStatus } from '@/lib/data-adapter';
 import type { LinkRequest } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import Image from 'next/image';
@@ -16,7 +16,7 @@ type TemporaryState = 'success' | 'error' | null;
 export default function KioskPage() {
   const [mode, setMode] = useState<KioskMode>('waiting');
   const [tempState, setTempState] = useState<TemporaryState>(null);
-  const [message, setMessage] = useState('Touch NFC tag');
+  const [message, setMessage] = useState('NFCタグをタッチしてください');
   const [subMessage, setSubMessage] = useState('');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [registrationUrl, setRegistrationUrl] = useState('');
@@ -28,7 +28,7 @@ export default function KioskPage() {
   const resetToWaiting = useCallback(() => {
     setMode('waiting');
     setTempState(null);
-    setMessage('Touch NFC tag');
+    setMessage('NFCタグをタッチしてください');
     setSubMessage('');
     setQrCodeUrl('');
     setRegistrationUrl('');
@@ -58,73 +58,22 @@ export default function KioskPage() {
   }, []);
 
   const handleAttendance = useCallback(async (cardId: string) => {
-    try {
-      const usersRef = collection(db, 'users');
-      const userQuery = query(usersRef, where('cardId', '==', cardId), limit(1));
-      const userSnapshot = await getDocs(userQuery);
-
-      if (userSnapshot.empty) {
-        showTemporaryMessage('Unregistered Card', 'Press "/" to register this card.', 'error');
-        return;
-      }
-      const userData = userSnapshot.docs[0].data();
-      const userId = userSnapshot.docs[0].id;
-
-      const logsRef = collection(db, 'attendance_logs');
-      const lastLogQuery = query(logsRef, where('cardId', '==', cardId), orderBy('timestamp', 'desc'), limit(1));
-      const lastLogSnapshot = await getDocs(lastLogQuery);
-
-      let logType: 'entry' | 'exit' = 'entry';
-      if (!lastLogSnapshot.empty) {
-        const lastLog = lastLogSnapshot.docs[0].data();
-        if (lastLog.type === 'entry') {
-          logType = 'exit';
-        }
-      }
-      
-      const batch = writeBatch(db);
-      const newLogRef = doc(collection(db, 'attendance_logs'));
-
-      batch.set(newLogRef, {
-        uid: userId,
-        cardId: cardId,
-        type: logType,
-        timestamp: serverTimestamp(),
-      });
-
-      // Also update the last_activity on the user document
-      const userDocRef = doc(db, 'users', userId);
-      batch.update(userDocRef, {
-          last_activity: serverTimestamp(),
-          status: logType === 'entry' ? 'active' : 'inactive',
-      });
-      
-      await batch.commit();
-
-      const welcomeMsg = `Welcome, ${userData.firstname}!`;
-      const actionMsg = logType === 'entry' ? 'Checked In' : 'Checked Out';
-      showTemporaryMessage(welcomeMsg, actionMsg, 'success');
-
-    } catch (err) {
-      console.error(err);
-      showTemporaryMessage('An Error Occurred', 'Please try again.', 'error');
+    const result = await handleAttendanceByCardId(cardId);
+    if (result.status === 'unregistered') {
+      showTemporaryMessage(result.message, result.subMessage || '', 'error');
+    } else {
+      showTemporaryMessage(result.message, result.subMessage, result.status);
     }
   }, [showTemporaryMessage]);
 
   const handleRegistration = useCallback(async (cardId: string) => {
     setMode('loading_qr');
-    setMessage('Generating Registration Link...');
-    setSubMessage('Please wait a moment.');
+    setMessage('登録用リンクを生成中...');
+    setSubMessage('しばらくお待ちください');
 
     try {
         const token = uuidv4();
-        await addDoc(collection(db, 'link_requests'), {
-            token: token,
-            cardId: cardId,
-            status: 'waiting',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-        });
+        await createLinkRequest(token);
         
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost';
   const url = `${appUrl.replace(/\/+$/, '')}/register?token=${token}`;
@@ -132,18 +81,18 @@ export default function KioskPage() {
         setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`);
         setLinkRequestToken(token);
         setMode('register_qr');
-        setMessage('Scan QR code to link your card');
-        setSubMessage('Press ESC to cancel');
+        setMessage('QRコードをスキャンしてカードを登録');
+        setSubMessage('ESCキーでキャンセル');
 
     } catch (err) {
-        console.error("Error during registration link generation:", err);
-        showTemporaryMessage('Registration Error', 'Could not generate link. Please check connection.', 'error');
+        console.error("登録リンク生成エラー:", err);
+        showTemporaryMessage('登録エラー', 'リンクを生成できませんでした。接続を確認してください。', 'error');
     }
   }, [showTemporaryMessage]);
 
  const processInput = useCallback((input: string) => {
     if (!isOnline) {
-      showTemporaryMessage('Network Offline', 'Please check connection.', 'error');
+      showTemporaryMessage('ネットワークがオフラインです', '接続を確認してください。', 'error');
       return;
     }
     const trimmedInput = input.trim();
@@ -166,7 +115,7 @@ export default function KioskPage() {
       if (mode === 'waiting' && e.key === '/') {
         e.preventDefault();
         setMode('register_prompt');
-        setMessage('Touch the new NFC tag to register');
+        setMessage('登録したいNFCタグをタッチしてください');
         setSubMessage('');
         setInputBuffer('');
         return;
@@ -196,7 +145,7 @@ export default function KioskPage() {
         if (snapshot.empty) return;
         const data = snapshot.docs[0].data() as LinkRequest;
         if (data.status === 'done') {
-            showTemporaryMessage('Registration Complete!', 'You can now use your tag to check in.', 'success', 4000);
+            showTemporaryMessage('登録が完了しました！', 'カードを使って出退勤を記録できます。', 'success', 4000);
             unsubscribe();
         }
       });
@@ -244,7 +193,7 @@ export default function KioskPage() {
     <div className="flex h-full w-full flex-col items-center justify-between p-8 text-center text-white bg-gray-900 bg-gradient-to-br from-gray-900 via-black to-gray-900 overflow-hidden">
        <div className="absolute top-4 right-4 flex items-center gap-2 text-lg font-medium text-gray-300">
         {isOnline ? <Wifi className="text-green-400" /> : <WifiOff className="text-red-400" />}
-        <span>{isOnline ? 'Online' : 'Offline'}</span>
+        <span>{isOnline ? 'オンライン' : 'オフライン'}</span>
       </div>
       
       <div className="w-full" />
@@ -258,9 +207,10 @@ export default function KioskPage() {
       </div>
 
       <div className="text-xl text-gray-500 pb-4">
-        {mode === 'waiting' && !tempState && <p>Press <kbd className="p-1 px-2 bg-gray-700 rounded-md text-gray-300 font-mono">/</kbd> for new registration</p>}
-        {(mode === 'register_prompt' || mode === 'register_qr') && <p>Press <kbd className="p-1 px-2 bg-gray-700 rounded-md text-gray-300 font-mono">ESC</kbd> to cancel</p>}
+        {mode === 'waiting' && !tempState && <p>新しいカードを登録するには <kbd className="p-1 px-2 bg-gray-700 rounded-md text-gray-300 font-mono">/</kbd> キーを押してください</p>}
+        {(mode === 'register_prompt' || mode === 'register_qr') && <p><kbd className="p-1 px-2 bg-gray-700 rounded-md text-gray-300 font-mono">ESC</kbd> キーでキャンセル</p>}
       </div>
     </div>
   );
 }
+
