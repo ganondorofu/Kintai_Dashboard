@@ -54,7 +54,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
   const router = useRouter();
   const [teams, setTeams] = useState<TeamData[]>([]);
   const [teamDefinitions, setTeamDefinitions] = useState<Team[]>([]);
-  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
+  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const isAdmin = user?.role === 'admin';
@@ -141,13 +141,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
   }, [allUsers, user, isAdmin]);
 
   const toggleTeam = (teamId: string) => {
-    const newExpanded = new Set(expandedTeams);
-    if (newExpanded.has(teamId)) {
-      newExpanded.delete(teamId);
-    } else {
-      newExpanded.add(teamId);
-    }
-    setExpandedTeams(newExpanded);
+    setExpandedTeam(prev => (prev === teamId ? null : teamId));
   };
 
   const handleTeamClick = (teamId: string) => {
@@ -246,7 +240,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
                         }}
                         className="p-1 hover:bg-gray-100 rounded transition-colors"
                       >
-                        {expandedTeams.has(team.teamId) ? (
+                        {expandedTeam === team.teamId ? (
                           <ChevronDown className="h-4 w-4" />
                         ) : (
                           <ChevronRight className="h-4 w-4" />
@@ -255,7 +249,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
                     </div>
                   </div>
                   
-                  {expandedTeams.has(team.teamId) && (
+                  {expandedTeam === team.teamId && (
                     <div className="ml-6 mt-1 space-y-1">
                       {team.members.map((member) => (
                         <div 

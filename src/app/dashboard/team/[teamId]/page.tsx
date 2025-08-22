@@ -7,7 +7,7 @@ import { ArrowLeft, Users, Calendar, Clock, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { getAllUsers, getDailyAttendanceStatsV2, getAllTeams } from '@/lib/data-adapter';
+import { getAllUsers, getDailyAttendanceStatsV2, getAllTeams, getUserAttendanceRecords } from '@/lib/data-adapter';
 import type { User, Team } from '@/types';
 
 interface TeamStats {
@@ -56,11 +56,16 @@ export default function TeamStatsPage() {
         const currentTeamStats = todayStats.find(t => t.teamId === teamId);
         const presentToday = currentTeamStats?.gradeStats.reduce((acc, g) => acc + g.count, 0) || 0;
 
-        // 月間出席率を計算（実際のデータベースから取得する場合は別途実装が必要）
-        // ここでは暫定的に今日のデータから推定
+        // 月間出席率を計算
+        let totalAttendedDays = 0;
+        for (const member of teamMembers) {
+          const records = await getUserAttendanceRecords(member.uid, 30);
+          totalAttendedDays += records.filter(r => r.checkInTime).length;
+        }
+        
         const averageAttendance = teamMembers.length > 0 ? 
-          Math.round((presentToday / teamMembers.length) * 100) : 0;
-
+          Math.round((totalAttendedDays / (teamMembers.length * 30)) * 100) : 0;
+          
         setTeamStats({
           teamId,
           teamName: currentTeam.name,
