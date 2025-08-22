@@ -169,6 +169,93 @@ const calculateDailyAttendanceFromLogsData = async (
   }
 };
 
+const calculateDailyAttendanceFromLogs = async (
+  targetDate: Date
+): Promise<{
+  teamId: string;
+  teamName?: string;
+  gradeStats: { grade: number; count: number; users: AppUser[] }[];
+}[]> => {
+  try {
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // 指定日の出勤記録があるログを取得
+    const logsRef = collection(db, 'attendance_logs');
+    const q = query(
+      logsRef,
+      where('timestamp', '>=', startOfDay),
+      where('timestamp', '<=', endOfDay),
+      where('type', '==', 'entry')
+    );
+    
+    const snapshot = await getDocs(q);
+    const dayEntryLogs = snapshot.docs.map(doc => doc.data() as AttendanceLog);
+    
+    // 出席したユーザーのUIDを取得（重複排除）
+    const attendedUids = [...new Set(dayEntryLogs.map(log => log.uid))];
+    
+    if (attendedUids.length === 0) {
+      return [];
+    }
+
+    // 全ユーザー情報を取得
+    const allUsers = await getAllUsers();
+    
+    // 出席したユーザーの情報を取得
+    const attendedUsers = allUsers.filter(user => attendedUids.includes(user.uid));
+
+    // 班ごとにグループ化
+    const teamGroups = attendedUsers.reduce((acc, user) => {
+      const teamId = user.teamId || 'unassigned';
+      if (!acc[teamId]) {
+        acc[teamId] = [];
+      }
+      acc[teamId].push(user);
+      return acc;
+    }, {} as Record<string, AppUser[]>);
+
+    // チーム情報を取得
+    const teams = await getAllTeams();
+    const teamMap = teams.reduce((acc, team) => {
+      acc[team.id] = team.name;
+      return acc;
+    }, {} as Record<string, string>);
+
+    // 結果を構築
+    return Object.entries(teamGroups).map(([teamId, users]) => {
+      // 学年ごとにグループ化（期生を学年に変換）
+      const gradeGroups = users.reduce((acc, user) => {
+        const kiseiNumber = user.grade || 10; // デフォルトは10期生
+        const actualGrade = convertKiseiiToGrade(kiseiNumber);
+        if (!acc[actualGrade]) {
+          acc[actualGrade] = [];
+        }
+        acc[actualGrade].push(user);
+        return acc;
+      }, {} as Record<number, AppUser[]>);
+
+      const gradeStats = Object.entries(gradeGroups).map(([gradeStr, gradeUsers]) => ({
+        grade: parseInt(gradeStr),
+        count: gradeUsers.length,
+        users: gradeUsers.map(u => ({ ...u, isPresent: true }))
+      })).sort((a, b) => b.grade - a.grade); // 学年の降順
+
+      return {
+        teamId,
+        teamName: teamMap[teamId],
+        gradeStats
+      };
+    });
+  } catch (error) {
+    console.error('ログデータからの統計計算エラー:', error);
+    return [];
+  }
+};
+
 // 期生から学年への変換ヘルパー関数
 // 2025年時点: 8期生=3年生, 9期生=2年生, 10期生=1年生
 const convertKiseiiToGrade = (kiseiNumber: number, currentYear: number = new Date().getFullYear()): number => {
@@ -1403,4 +1490,62 @@ export const getTeamMembers = async (teamId: string): Promise<AppUser[]> => {
     console.error('Error fetching team members:', error);
     throw error;
   }
+};
+
+// チーム一覧を取得（重複を許容しないように修正）
+export const getAllTeams = async (): Promise<Team[]> => {
+  try {
+    const teamsRef = collection(db, 'teams');
+    const snapshot = await getDocs(teamsRef);
+    
+    // IDの重複を排除
+    const teamMap = new Map<string, Team>();
+    snapshot.docs.forEach(doc => {
+      const team = {
+        id: doc.id,
+        ...doc.data() as Omit<Team, 'id'>
+      } as Team;
+      teamMap.set(doc.id, team);
+    });
+    
+    return Array.from(teamMap.values());
+  } catch (error) {
+    console.error('Error fetching teams:', error);
+    throw error;
+  }
+};
+
+// 特定チームの勤怠ログを取得
+export const getTeamAttendanceLogs = async (teamId: string, limitCount: number = 50): Promise<AttendanceLog[]> => {
+  try {
+    // チームに所属するユーザーを取得
+    const members = await getTeamMembers(teamId);
+    if (members.length === 0) return [];
+
+    const memberUids = members.map(m => m.uid);
+
+    // メンバーのUIDを使ってログを検索
+    const logsRef = collection(db, 'attendance_logs');
+    const q = query(
+      logsRef,
+      where('uid', 'in', memberUids),
+      orderBy('timestamp', 'desc'),
+      limit(limitCount)
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as AttendanceLog));
+  } catch (error) {
+    console.error('チームの勤怠ログ取得エラー:', error);
+    return [];
+  }
+};
+
+// ログIDを生成するヘルパー関数
+export const generateAttendanceLogId = (uid: string): string => {
+  return `${uid}_${Date.now()}`;
 };
