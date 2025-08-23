@@ -13,40 +13,21 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import type { AttendanceLog } from '@/types';
 import path from 'path';
-import dotenv from 'dotenv';
-
-// .envファイルを読み込む
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
-
 
 // Firebase Admin SDK の初期化
 if (!getApps().length) {
-  const serviceAccountPath = path.join(process.cwd(), 'firebase-service-account-key.json');
-  
   try {
-    // 方法1: サービスアカウントキーファイルを使用
+    const serviceAccountPath = path.join(process.cwd(), 'firebase-service-account-key.json');
     const serviceAccount = require(serviceAccountPath);
     initializeApp({
       credential: cert(serviceAccount),
     });
     console.log('Firebase Admin SDK initialized with service account key file.');
-  } catch (error) {
-    // 方法2: ファイルが見つからない場合は環境変数を使用
-    console.log('Service account key file not found, trying environment variables...');
-    if (process.env.NEXT_PUBLIC_FIREBASE_DATA_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
-      initializeApp({
-        credential: cert({
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_DATA_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-        }),
-      });
-      console.log('Firebase Admin SDK initialized with environment variables.');
-    } else {
-      console.error('Firebase Admin SDK initialization failed. Either firebase-service-account-key.json or required environment variables are missing.');
-      process.exit(1);
-    }
+  } catch (error: any) {
+    console.error('Firebase Admin SDK initialization failed.');
+    console.error('Ensure "firebase-service-account-key.json" exists in the project root.');
+    console.error('Original error:', error.message);
+    process.exit(1);
   }
 }
 
