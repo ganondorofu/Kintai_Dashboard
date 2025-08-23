@@ -1,7 +1,7 @@
+
 'use client';
 
 import { AttendanceLogs } from './attendance-logs';
-import { AttendanceStats } from './attendance-stats';
 import type { AppUser } from '@/types';
 import { UserInfoCard } from './user-info-card';
 import { useDashboard } from '@/contexts/dashboard-context';
@@ -21,9 +21,7 @@ export default function UserDashboard({ user }: UserDashboardProps) {
           <Skeleton className="h-24 w-full" />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 space-y-6">
-              <Skeleton className="h-32" />
-              <Skeleton className="h-36" />
-              <Skeleton className="h-24" />
+              <Skeleton className="h-64" />
             </div>
             <div className="lg:col-span-2">
               <Skeleton className="h-96" />
@@ -48,7 +46,6 @@ export default function UserDashboard({ user }: UserDashboardProps) {
         {/* Left Column */}
         <div className="lg:col-span-1 space-y-6">
           <UserInfoCard user={user} allTeams={allTeams} />
-          <AttendanceStats user={user} />
         </div>
 
         {/* Right Column */}
