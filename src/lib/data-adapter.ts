@@ -5,7 +5,9 @@ import { db } from './firebase';
 import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
 import type { GitHubUser } from './oauth';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { zonedTimeToUtc, formatInTimeZone } from 'date-fns-tz';
 
+const JST_TIMEZONE = 'Asia/Tokyo';
 /**
  * 既存のFirestoreデータ構造とOAuth認証を統合するためのアダプター
  * 
@@ -56,10 +58,10 @@ export const safeTimestampToDate = (timestamp: any): Date | null => {
 // 新しいデータ構造用のヘルパー関数
 export const getAttendancePath = (date: Date): { year: string, month: string, day: string, fullPath: string } => {
   // JST (UTC+9) で日付を取得
-  const jstDate = new Date(date.getTime());
-  const year = jstDate.getFullYear().toString();
-  const month = (jstDate.getMonth() + 1).toString().padStart(2, '0');
-  const day = jstDate.getDate().toString().padStart(2, '0');
+  const jstDate = zonedTimeToUtc(date, JST_TIMEZONE);
+  const year = formatInTimeZone(jstDate, JST_TIMEZONE, 'yyyy');
+  const month = formatInTimeZone(jstDate, JST_TIMEZONE, 'MM');
+  const day = formatInTimeZone(jstDate, JST_TIMEZONE, 'dd');
   
   return {
     year,

@@ -2,7 +2,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, differenceInMinutes, subMonths, addMonths } from 'date-fns';
+import { formatInTimeZone, zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
+import { startOfMonth, endOfMonth, differenceInMinutes, subMonths, addMonths } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { getUserAttendanceLogsV2, safeTimestampToDate } from '@/lib/data-adapter';
 import type { AttendanceLog, AppUser } from '@/types';
@@ -21,6 +22,8 @@ interface ProcessedLog {
   workDuration: string | null;
 }
 
+const JST_TIMEZONE = 'Asia/Tokyo';
+
 export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [logs, setLogs] = useState<ProcessedLog[]>([]);
@@ -30,15 +33,17 @@ export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user }) => {
     const fetchLogs = async () => {
       setLoading(true);
       try {
-        const monthStart = startOfMonth(currentMonth);
-        const monthEnd = endOfMonth(currentMonth);
+        const zonedCurrentMonth = utcToZonedTime(currentMonth, JST_TIMEZONE);
+        const monthStart = startOfMonth(zonedCurrentMonth);
+        const monthEnd = endOfMonth(zonedCurrentMonth);
+        
         const fetchedLogs = await getUserAttendanceLogsV2(user.uid, monthStart, monthEnd, 1000);
         
         const logsByDate: { [key: string]: AttendanceLog[] } = {};
         fetchedLogs.forEach(log => {
           const logDate = safeTimestampToDate(log.timestamp);
           if (logDate) {
-            const dateKey = format(logDate, 'yyyy-MM-dd');
+            const dateKey = formatInTimeZone(logDate, JST_TIMEZONE, 'yyyy-MM-dd');
             if (!logsByDate[dateKey]) {
               logsByDate[dateKey] = [];
             }
@@ -90,7 +95,6 @@ export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user }) => {
     setCurrentMonth(addMonths(currentMonth, 1));
   };
 
-
   return (
     <Card className="h-full">
       <CardHeader className="flex flex-row items-center justify-between">
@@ -100,7 +104,7 @@ export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user }) => {
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="font-semibold text-lg w-32 text-center">
-            {format(currentMonth, 'yyyy年 M月', { locale: ja })}
+            {formatInTimeZone(currentMonth, JST_TIMEZONE, 'yyyy年 M月', { locale: ja })}
           </span>
           <Button variant="outline" size="icon" onClick={handleNextMonth}>
             <ChevronRight className="h-4 w-4" />
@@ -131,13 +135,13 @@ export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user }) => {
               {logs.map((log) => (
                 <tr key={log.date}>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                     {format(new Date(log.date), 'MM/dd(E)', { locale: ja })}
+                     {formatInTimeZone(zonedTimeToUtc(log.date, JST_TIMEZONE), JST_TIMEZONE, 'MM/dd(E)', { locale: ja })}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500 font-mono">
-                    {log.checkInTime ? format(log.checkInTime, 'HH:mm') : '-'}
+                    {log.checkInTime ? formatInTimeZone(log.checkInTime, JST_TIMEZONE, 'HH:mm') : '-'}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500 font-mono">
-                    {log.checkOutTime ? format(log.checkOutTime, 'HH:mm') : '-'}
+                    {log.checkOutTime ? formatInTimeZone(log.checkOutTime, JST_TIMEZONE, 'HH:mm') : '-'}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-500 font-mono">
                     {log.workDuration || '-'}
