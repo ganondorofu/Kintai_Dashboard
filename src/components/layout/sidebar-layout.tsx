@@ -26,6 +26,8 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
         return { text: 'キャッシュ', variant: 'outline' as const, className: 'border-blue-500 text-blue-600' };
       case 'fresh':
         return { text: '最新', variant: 'default' as const, className: 'bg-green-500 text-white' };
+      case 'error':
+        return { text: 'エラー', variant: 'destructive' as const, className: 'bg-red-500 text-white' };
       default:
         return null;
     }

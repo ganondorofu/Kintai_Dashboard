@@ -29,8 +29,8 @@ interface DashboardContextType {
   clearCache: () => void;
 
   // デバッグ用
-  cacheStatus: 'loading' | 'cached' | 'fresh';
-  setCacheStatus: React.Dispatch<React.SetStateAction<'loading' | 'cached' | 'fresh'>>;
+  cacheStatus: 'loading' | 'cached' | 'fresh' | 'error';
+  setCacheStatus: React.Dispatch<React.SetStateAction<'loading' | 'cached' | 'fresh' | 'error'>>;
 }
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
@@ -41,7 +41,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [cacheStatus, setCacheStatus] = useState<'loading' | 'cached' | 'fresh'>('fresh');
+  const [cacheStatus, setCacheStatus] = useState<'loading' | 'cached' | 'fresh' | 'error'>('fresh');
 
 
   // 初期データの取得
