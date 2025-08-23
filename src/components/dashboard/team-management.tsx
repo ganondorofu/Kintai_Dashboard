@@ -254,6 +254,17 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
             <h3 className="text-lg font-bold mb-4">ユーザー編集</h3>
             
             <div className="space-y-4">
+               <div>
+                <label className="block text-sm font-medium text-gray-700">カードID</label>
+                <input
+                  type="text"
+                  value={editingUser.cardId || ''}
+                  onChange={(e) => setEditingUser(prev => prev ? { ...prev, cardId: e.target.value } : null)}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                  placeholder="NFCカードID"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700">役割</label>
                 <select
@@ -311,7 +322,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
                 onClick={() => handleUserUpdate(editingUser.uid, {
                   role: editingUser.role,
                   teamId: editingUser.teamId,
-                  grade: editingUser.grade
+                  grade: editingUser.grade,
+                  cardId: editingUser.cardId,
                 })}
                 className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
               >
