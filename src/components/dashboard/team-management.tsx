@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { getTeamMembers, getTeamAttendanceLogs, getAllUsers, getAllTeams, updateUser, formatKisei, createAttendanceLogV2 } from '@/lib/data-adapter';
+import { getTeamMembers, getAllUsers, getAllTeams, updateUser, formatKisei, createAttendanceLogV2, getDailyAttendanceStatsV2 } from '@/lib/data-adapter';
 import type { AppUser, AttendanceLog, Team } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
   const [users, setUsers] = useState<AppUser[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
-  const [teamLogs, setTeamLogs] = useState<AttendanceLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
@@ -30,7 +29,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
     try {
       const [fetchedTeams, fetchedUsers] = await Promise.all([
         getAllTeams(),
-        isAdmin ? getAllUsers() : getTeamMembers(currentUser.teamId || '')
+        getAllUsers() // N+1問題を解決した関数を常に使用
       ]);
       
       setTeams(fetchedTeams);
@@ -50,20 +49,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
     fetchData();
   }, [currentUser, isAdmin]);
 
-  useEffect(() => {
-    const fetchTeamLogs = async () => {
-      if (!selectedTeam) return;
-      
-      try {
-        const logs = await getTeamAttendanceLogs(selectedTeam);
-        setTeamLogs(logs);
-      } catch (error) {
-        console.error('チーム勤怠ログ取得エラー:', error);
-      }
-    };
-
-    fetchTeamLogs();
-  }, [selectedTeam]);
 
   const handleUserUpdate = async (uid: string, updates: Partial<AppUser>) => {
     try {
