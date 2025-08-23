@@ -149,7 +149,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
                 {filteredUsers.map((user) => (
                   <tr key={user.uid}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {user.firstname} {user.lastname}
+                      {user.lastname} {user.firstname}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {user.github}
@@ -217,7 +217,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
                       return (
                         <tr key={log.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {user ? `${user.firstname} ${user.lastname}` : log.uid}
+                            {user ? `${user.lastname} ${user.firstname}` : log.uid}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.timestamp && typeof log.timestamp.toDate === 'function' 
