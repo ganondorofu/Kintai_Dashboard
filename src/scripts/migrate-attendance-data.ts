@@ -17,7 +17,7 @@ import path from 'path';
 // Firebase Admin SDK の初期化
 if (!getApps().length) {
   try {
-    const serviceAccountPath = path.join(process.cwd(), 'firebase-service-account-key.json');
+    const serviceAccountPath = path.join(process.cwd(), 'kintai-stem-honban.json');
     const serviceAccount = require(serviceAccountPath);
     initializeApp({
       credential: cert(serviceAccount),

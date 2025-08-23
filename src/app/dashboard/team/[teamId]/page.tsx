@@ -7,9 +7,9 @@ import { ArrowLeft, Users, Calendar, Clock, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { getAllUsers, getDailyAttendanceStatsV2, getAllTeams, getUserAttendanceRecords, getWorkdaysInRange } from '@/lib/data-adapter';
-import type { User, Team } from '@/types';
-import { subDays } from 'date-fns';
+import { getAllUsers, getDailyAttendanceStatsV2, getAllTeams, getUserAttendanceLogsV2, getWorkdaysInRange, safeTimestampToDate } from '@/lib/data-adapter';
+import type { User, Team, AttendanceLog } from '@/types';
+import { subDays, differenceInMinutes } from 'date-fns';
 
 interface TeamStats {
   teamId: string;
@@ -20,6 +20,38 @@ interface TeamStats {
   averageAttendance: number;
   monthlyAttendance: { [key: string]: number };
 }
+
+const logsToRecords = (logs: AttendanceLog[]): any[] => {
+  const logsByDate: { [date: string]: { checkIn?: Date, checkOut?: Date } } = {};
+
+  logs.forEach(log => {
+    const timestamp = safeTimestampToDate(log.timestamp);
+    if (!timestamp) return;
+
+    const dateStr = timestamp.toISOString().split('T')[0];
+
+    if (!logsByDate[dateStr]) {
+      logsByDate[dateStr] = {};
+    }
+
+    if (log.type === 'entry') {
+      if (!logsByDate[dateStr].checkIn || timestamp < logsByDate[dateStr].checkIn!) {
+        logsByDate[dateStr].checkIn = timestamp;
+      }
+    } else {
+      if (!logsByDate[dateStr].checkOut || timestamp > logsByDate[dateStr].checkOut!) {
+        logsByDate[dateStr].checkOut = timestamp;
+      }
+    }
+  });
+
+  return Object.entries(logsByDate).map(([date, record]) => ({
+    date,
+    checkInTime: record.checkIn?.toISOString(),
+    checkOutTime: record.checkOut?.toISOString(),
+  })).sort((a, b) => b.date.localeCompare(a.date));
+};
+
 
 export default function TeamStatsPage() {
   const params = useParams();
@@ -65,7 +97,8 @@ export default function TeamStatsPage() {
         // 班員の総出席日数を計算
         let totalAttendedDays = 0;
         for (const member of teamMembers) {
-          const records = await getUserAttendanceRecords(member.uid, 30);
+          const logs = await getUserAttendanceLogsV2(member.uid, thirtyDaysAgo, new Date());
+          const records = logsToRecords(logs);
           const attendedWorkdays = records.filter(r => r.checkInTime && workdays.some(wd => wd.toISOString().split('T')[0] === r.date)).length;
           totalAttendedDays += attendedWorkdays;
         }

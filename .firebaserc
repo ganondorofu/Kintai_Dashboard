@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "club-attendance-nzf1k"
-  }
+    "default": "club-attendance-nzf1k",
+    "dev": "stem-kintaikanri"
+  },
+  "targets": {},
+  "etags": {}
 }
