@@ -115,8 +115,8 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
   return (
     <Card>
         <CardHeader><CardTitle>勤務統計</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4">
-            <Card className="col-span-2 sm:col-span-1">
+        <CardContent className="space-y-4">
+            <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">出勤率 (対活動日)</CardTitle>
                     <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -126,7 +126,7 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
                     <p className="text-xs text-muted-foreground">過去30日間</p>
                 </CardContent>
             </Card>
-            <Card className="col-span-2 sm:col-span-1">
+            <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">出勤日数</CardTitle>
                     <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -136,7 +136,7 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
                     <p className="text-xs text-muted-foreground">{stats.totalWorkdays}活動日中</p>
                 </CardContent>
             </Card>
-            <Card className="col-span-2 sm:col-span-1">
+            <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">平均チェックイン</CardTitle>
                     <Clock className="h-4 w-4 text-muted-foreground" />
@@ -146,7 +146,7 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
                     <p className="text-xs text-muted-foreground">過去30日間の平均</p>
                 </CardContent>
             </Card>
-             <Card className="col-span-2 sm:col-span-1">
+             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">総労働時間</CardTitle>
                     <Clock className="h-4 w-4 text-muted-foreground" />
@@ -160,4 +160,3 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
     </Card>
   );
 }
-
