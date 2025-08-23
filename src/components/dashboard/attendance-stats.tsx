@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getUserAttendanceLogsV2, safeTimestampToDate, getWorkdaysInRange } from '@/lib/data-adapter';
 import type { AppUser } from '@/types';
 import { format, subDays, differenceInMinutes, startOfMonth, isSameDay } from 'date-fns';
@@ -19,18 +20,20 @@ interface Stats {
 export function AttendanceStats({ user }: { user: AppUser }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const calculateStats = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const now = new Date();
       const thirtyDaysAgo = subDays(now, 30);
       const startOfCurrentMonth = startOfMonth(now);
 
       const [logsLast30Days, workdaysLast30Days, totalLogs] = await Promise.all([
-        getUserAttendanceLogsV2(user.uid, thirtyDaysAgo, now, 1000), // 30日分のログを取得
+        getUserAttendanceLogsV2(user.uid, thirtyDaysAgo, now, 1000),
         getWorkdaysInRange(thirtyDaysAgo, now),
-        getUserAttendanceLogsV2(user.uid, new Date(0), now, 9999), // 累計用
+        getUserAttendanceLogsV2(user.uid, new Date(0), now, 9999),
       ]);
       
       const logsByDate = new Map<string, { checkIn: Date | null, checkOut: Date | null }>();
@@ -122,6 +125,7 @@ export function AttendanceStats({ user }: { user: AppUser }) {
 
     } catch (error) {
       console.error('統計データの計算に失敗:', error);
+      setError('統計データを読み込めませんでした。');
     } finally {
       setLoading(false);
     }
@@ -134,13 +138,31 @@ export function AttendanceStats({ user }: { user: AppUser }) {
   if (loading) {
     return (
         <>
-            <Card className="animate-pulse"><CardContent className="h-36" /></Card>
-            <Card className="animate-pulse"><CardContent className="h-24" /></Card>
+            <Skeleton className="h-36 w-full" />
+            <Skeleton className="h-24 w-full" />
         </>
     );
   }
 
-  if (!stats) return null;
+  if (error) {
+      return (
+          <Card>
+              <CardContent className="pt-6">
+                  <p className="text-center text-red-500">{error}</p>
+              </CardContent>
+          </Card>
+      )
+  }
+
+  if (!stats) {
+       return (
+        <Card>
+            <CardContent className="pt-6">
+                <p className="text-center text-gray-500">統計データがありません。</p>
+            </CardContent>
+        </Card>
+    );
+  }
 
   return (
     <>
