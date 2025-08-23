@@ -1,4 +1,3 @@
-
 'use client';
 
 import { AttendanceLogs } from './attendance-logs';
@@ -6,6 +5,7 @@ import { AttendanceStats } from './attendance-stats';
 import type { AppUser } from '@/types';
 import { UserInfoCard } from './user-info-card';
 import { useDashboard } from '@/contexts/dashboard-context';
+import { Skeleton } from '@/components/ui/skeleton';
 
 
 interface UserDashboardProps {
@@ -16,7 +16,21 @@ export default function UserDashboard({ user }: UserDashboardProps) {
   const { allTeams, isLoading } = useDashboard();
 
   if (isLoading) {
-      return <div>Loading...</div>;
+      return (
+        <div className="space-y-6">
+          <Skeleton className="h-24 w-full" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 space-y-6">
+              <Skeleton className="h-32" />
+              <Skeleton className="h-36" />
+              <Skeleton className="h-24" />
+            </div>
+            <div className="lg:col-span-2">
+              <Skeleton className="h-96" />
+            </div>
+          </div>
+        </div>
+      )
   }
 
   return (
