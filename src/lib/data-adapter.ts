@@ -394,26 +394,11 @@ export const getUserAttendanceLogsV2 = async (
     const effectiveStartDate = startDate || new Date(0);
     const effectiveEndDate = endDate || new Date();
 
-    const yearMonths = getYearMonthsInRange(effectiveStartDate, effectiveEndDate);
+    for (let d = new Date(effectiveEndDate); d >= effectiveStartDate; d.setDate(d.getDate() - 1)) {
+        if (logs.length >= limitCount) break;
 
-    for (const { year, month } of yearMonths.reverse()) {
-      const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
-      
-      const startDay =
-        effectiveEndDate.getFullYear().toString() === year &&
-        (effectiveEndDate.getMonth() + 1).toString().padStart(2, '0') === month
-          ? effectiveEndDate.getDate()
-          : daysInMonth;
-
-      const endDay =
-        effectiveStartDate.getFullYear().toString() === year &&
-        (effectiveStartDate.getMonth() + 1).toString().padStart(2, '0') === month
-          ? effectiveStartDate.getDate()
-          : 1;
-
-      for (let day = startDay; day >= endDay; day--) {
-        const dayStr = day.toString().padStart(2, '0');
-        const dateKey = `${year}-${month}-${dayStr}`;
+        const { year, month, day } = getAttendancePath(d);
+        const dateKey = `${year}-${month}-${day}`;
         const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
 
         const q = query(
@@ -421,28 +406,17 @@ export const getUserAttendanceLogsV2 = async (
           where('uid', '==', uid),
           orderBy('timestamp', 'desc')
         );
-
+        
         const daySnapshot = await getDocs(q);
         const dayLogs = daySnapshot.docs.map(
-          (doc) =>
-            ({
-              id: doc.id,
-              ...doc.data(),
-            } as AttendanceLog)
+          (doc) => ({ id: doc.id, ...doc.data() } as AttendanceLog)
         );
-
         logs.push(...dayLogs);
-      }
     }
 
     if (logs.length < limitCount) {
-      const oldLogs = await getUserAttendanceLogs(
-        uid,
-        startDate,
-        endDate,
-        limitCount - logs.length
-      );
-      logs.push(...oldLogs);
+        const oldLogs = await getUserAttendanceLogs(uid, startDate, endDate, limitCount - logs.length);
+        logs.push(...oldLogs);
     }
     
     return logs
@@ -452,11 +426,13 @@ export const getUserAttendanceLogsV2 = async (
         return timeB - timeA;
       })
       .slice(0, limitCount);
+
   } catch (error) {
     console.error('新しい勤怠ログ取得エラー:', error);
-    return await getUserAttendanceLogs(uid, startDate, endDate, limitCount);
+    return getUserAttendanceLogs(uid, startDate, endDate, limitCount);
   }
 };
+
 
 export const getUserAttendanceLogs = async (
   uid: string, 
@@ -466,18 +442,21 @@ export const getUserAttendanceLogs = async (
 ): Promise<AttendanceLog[]> => {
   try {
     const logsRef = collection(db, 'attendance_logs');
-    let q = query(
-      logsRef, 
-      where('uid', '==', uid),
-      orderBy('timestamp', 'desc')
-    );
-
-    if (startDate && endDate) {
-      q = query(q, where('timestamp', '>=', startDate), where('timestamp', '<=', endDate));
-    }
     
-    q = query(q, limit(limitCount));
+    let conditions = [
+        where('uid', '==', uid),
+        orderBy('timestamp', 'desc')
+    ];
 
+    if (startDate) {
+        conditions.push(where('timestamp', '>=', startDate));
+    }
+    if (endDate) {
+        conditions.push(where('timestamp', '<=', endDate));
+    }
+
+    let q = query(logsRef, ...conditions, limit(limitCount));
+    
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -500,30 +479,18 @@ export const getAllAttendanceLogs = async (
     const effectiveStartDate = startDate || new Date(0);
     const effectiveEndDate = endDate || new Date();
 
-    const yearMonths = getYearMonthsInRange(effectiveStartDate, effectiveEndDate);
-    
-    for (const { year, month } of yearMonths.reverse()) {
-        const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
-        const startDay = effectiveEndDate.getFullYear().toString() === year && 
-                         (effectiveEndDate.getMonth() + 1).toString().padStart(2, '0') === month
-                         ? effectiveEndDate.getDate() : daysInMonth;
-
-        const endDay = effectiveStartDate.getFullYear().toString() === year &&
-                       (effectiveStartDate.getMonth() + 1).toString().padStart(2, '0') === month
-                       ? effectiveStartDate.getDate() : 1;
+    for (let d = new Date(effectiveEndDate); d >= effectiveStartDate; d.setDate(d.getDate() - 1)) {
+        if (allLogs.length >= limitCount) break;
+        const { year, month, day } = getAttendancePath(d);
+        const dateKey = `${year}-${month}-${day}`;
+        const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
+        const daySnapshot = await getDocs(dayLogsRef);
         
-        for (let day = startDay; day >= endDay; day--) {
-            const dayStr = day.toString().padStart(2, '0');
-            const dateKey = `${year}-${month}-${dayStr}`;
-            const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
-            const daySnapshot = await getDocs(dayLogsRef);
-            
-            const dayLogs = daySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as AttendanceLog));
-            allLogs.push(...dayLogs);
-        }
+        const dayLogs = daySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as AttendanceLog));
+        allLogs.push(...dayLogs);
     }
     
     const oldLogsRef = collection(db, 'attendance_logs');
@@ -1552,5 +1519,6 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     return { status: 'error', message: 'エラーが発生しました', subMessage: 'もう一度お試しください' };
   }
 };
+
 
 
