@@ -5,15 +5,30 @@ import { useState, useEffect } from 'react';
 import { AttendanceLogs } from './attendance-logs';
 import type { AppUser, Team } from '@/types';
 import { UserInfoCard } from './user-info-card';
-import { AttendanceStats, type Stats } from './attendance-stats';
 import { useDashboard } from '@/contexts/dashboard-context';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getUserAttendanceLogsV2, getWorkdaysInRange, safeTimestampToDate } from '@/lib/data-adapter';
 import { format, subDays, differenceInMinutes, startOfMonth } from 'date-fns';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-interface UserDashboardProps {
-  user: AppUser;
+interface Stats {
+  attendanceRate: number;
+  attendedDaysLast30Days: number;
+  totalWorkdaysLast30Days: number;
+  averageCheckInTime: string;
+  totalWorkHours: number;
 }
+
+
+const StatItem = ({ label, value, subtext }: { label: string, value: React.ReactNode, subtext?: string }) => (
+    <div className="flex justify-between items-center text-sm">
+      <div>
+        <span className="text-muted-foreground">{label}</span>
+        {subtext && <p className="text-xs text-muted-foreground">{subtext}</p>}
+      </div>
+      <span className="font-semibold text-lg">{value}</span>
+    </div>
+  );
 
 export default function UserDashboard({ user }: UserDashboardProps) {
   const { allTeams, isLoading: isDashboardLoading } = useDashboard();
@@ -25,7 +40,6 @@ export default function UserDashboard({ user }: UserDashboardProps) {
     const fetchStatsAndTeam = async () => {
       setLoadingStats(true);
       
-      // チーム名の設定
       if (user.teamId && allTeams.length > 0) {
         const team = allTeams.find(t => t.id === user.teamId);
         setTeamName(team?.name || user.teamId);
@@ -33,11 +47,9 @@ export default function UserDashboard({ user }: UserDashboardProps) {
         setTeamName('未所属');
       }
 
-      // 統計情報の計算
       try {
         const now = new Date();
         const thirtyDaysAgo = subDays(now, 30);
-        const startOfCurrentMonth = startOfMonth(now);
 
         const logs = await getUserAttendanceLogsV2(user.uid, thirtyDaysAgo, now, 1000);
         const workdaysLast30Days = await getWorkdaysInRange(thirtyDaysAgo, now);
@@ -60,40 +72,22 @@ export default function UserDashboard({ user }: UserDashboardProps) {
         });
   
         const sortedDates = Array.from(logsByDate.keys()).sort((a,b) => b.localeCompare(a));
-        const lastAttendedDate = sortedDates.length > 0 ? format(new Date(sortedDates[0]), 'yyyy/MM/dd') : null;
         
-        const attendedDaysThisMonth = sortedDates.filter(date => new Date(date) >= startOfCurrentMonth).length;
-        
-        const totalLogs = await getUserAttendanceLogsV2(user.uid, new Date(0), now, 9999);
-        const totalAttendedDays = new Set(totalLogs.map(l => {
-          const d = safeTimestampToDate(l.timestamp);
-          return d ? format(d, 'yyyy-MM-dd') : null;
-        }).filter(Boolean)).size;
-  
         const workdaysSet = new Set(workdaysLast30Days.map(d => d.toISOString().split('T')[0]));
         const attendedWorkdaysLast30 = sortedDates.filter(date => new Date(date) >= thirtyDaysAgo && workdaysSet.has(date));
         const attendedDaysLast30Days = attendedWorkdaysLast30.length;
         const attendanceRate = workdaysLast30Days.length > 0 ? (attendedDaysLast30Days / workdaysLast30Days.length) * 100 : 0;
   
         let totalStayMinutes = 0;
-        let stayCount = 0;
-        logsByDate.forEach((dayData, dateKey) => {
-            if (new Date(dateKey) >= thirtyDaysAgo) {
-                if (dayData.checkIn && dayData.checkOut && dayData.checkOut > dayData.checkIn) {
-                    totalStayMinutes += differenceInMinutes(dayData.checkOut, dayData.checkIn);
-                    stayCount++;
-                }
+        Array.from(logsByDate.values()).forEach((dayData) => {
+            if (dayData.checkIn && dayData.checkOut && dayData.checkOut > dayData.checkIn) {
+                totalStayMinutes += differenceInMinutes(dayData.checkOut, dayData.checkIn);
             }
         });
   
-        const avgMinutes = stayCount > 0 ? totalStayMinutes / stayCount : 0;
-        const avgHours = Math.floor(avgMinutes / 60);
-        const avgRemainingMinutes = Math.round(avgMinutes % 60);
-        const averageStayDuration = `${avgHours}時間${avgRemainingMinutes}分`;
-
         const checkInTimes = Array.from(logsByDate.values())
           .map(d => d.checkIn)
-          .filter((d): d is Date => d !== null && new Date(d) >= thirtyDaysAgo);
+          .filter((d): d is Date => d !== null);
         
         let averageCheckInTime = '--:--';
         if (checkInTimes.length > 0) {
@@ -109,13 +103,9 @@ export default function UserDashboard({ user }: UserDashboardProps) {
         const totalWorkHours = totalStayMinutes / 60;
   
         setStats({
-          lastAttendedDate,
-          attendedDaysThisMonth,
-          totalAttendedDays,
           attendanceRate,
-          averageStayDuration,
-          totalWorkdaysLast30Days: workdaysLast30Days.length,
           attendedDaysLast30Days,
+          totalWorkdaysLast30Days: workdaysLast30Days.length,
           averageCheckInTime,
           totalWorkHours: parseFloat(totalWorkHours.toFixed(1))
         });
@@ -161,7 +151,50 @@ export default function UserDashboard({ user }: UserDashboardProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
           <UserInfoCard user={user} teamName={teamName} />
-          <AttendanceStats stats={stats} loading={loadingStats} />
+          {loadingStats ? (
+             <Card>
+                <CardHeader><CardTitle>勤務統計 (過去30日)</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <Skeleton className="h-6 w-full" />
+                  <Skeleton className="h-6 w-full" />
+                  <Skeleton className="h-6 w-full" />
+                  <Skeleton className="h-6 w-full" />
+                </CardContent>
+            </Card>
+          ) : stats ? (
+             <Card>
+                <CardHeader><CardTitle>勤務統計 (過去30日)</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    <StatItem 
+                        label="出勤率"
+                        subtext="対活動日"
+                        value={`${stats.attendanceRate.toFixed(0)}%`}
+                    />
+                     <StatItem 
+                        label="出勤日数"
+                        subtext={`${stats.totalWorkdaysLast30Days}活動日中`}
+                        value={`${stats.attendedDaysLast30Days}日`}
+                    />
+                    <StatItem 
+                      label="平均チェックイン"
+                      subtext="過去30日間の平均"
+                      value={stats.averageCheckInTime} 
+                    />
+                    <StatItem 
+                      label="総労働時間" 
+                      subtext="過去30日間"
+                      value={`${stats.totalWorkHours}h`} 
+                    />
+                </CardContent>
+            </Card>
+          ) : (
+             <Card>
+                <CardHeader><CardTitle>勤務統計 (過去30日)</CardTitle></CardHeader>
+                <CardContent>
+                    <p className="text-center text-gray-500">統計データを読み込めませんでした。</p>
+                </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="lg:col-span-2">
