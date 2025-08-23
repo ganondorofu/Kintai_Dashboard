@@ -3,10 +3,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getUserAttendanceLogsV2, safeTimestampToDate } from '@/lib/data-adapter';
+import { getUserAttendanceLogsV2, safeTimestampToDate, getWorkdaysInRange } from '@/lib/data-adapter';
 import type { AppUser } from '@/types';
-import { format, subDays, differenceInMinutes, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { format, subDays, differenceInMinutes, startOfMonth, endOfMonth, isSameDay } from 'date-fns';
 
 interface Stats {
   lastAttendedDate: string | null;
@@ -14,6 +13,8 @@ interface Stats {
   totalAttendedDays: number;
   attendanceRate: number;
   averageStayDuration: string;
+  totalWorkdaysLast30Days: number;
+  attendedDaysLast30Days: number;
 }
 
 export function AttendanceStats({ user }: { user: AppUser }) {
@@ -25,7 +26,12 @@ export function AttendanceStats({ user }: { user: AppUser }) {
     try {
       const now = new Date();
       const thirtyDaysAgo = subDays(now, 30);
-      const allLogs = await getUserAttendanceLogsV2(user.uid, new Date(0), now, 9999);
+      
+      // Get all logs and workdays in parallel
+      const [allLogs, workdaysLast30Days] = await Promise.all([
+        getUserAttendanceLogsV2(user.uid, new Date(0), now, 9999),
+        getWorkdaysInRange(thirtyDaysAgo, now)
+      ]);
 
       if (allLogs.length === 0) {
         setStats({
@@ -34,6 +40,8 @@ export function AttendanceStats({ user }: { user: AppUser }) {
           totalAttendedDays: 0,
           attendanceRate: 0,
           averageStayDuration: '0時間0分',
+          totalWorkdaysLast30Days: workdaysLast30Days.length,
+          attendedDaysLast30Days: 0,
         });
         setLoading(false);
         return;
@@ -70,13 +78,17 @@ export function AttendanceStats({ user }: { user: AppUser }) {
 
       const totalAttendedDays = sortedDates.length;
 
-      const thirtyDayLogs = sortedDates.filter(date => new Date(date) >= thirtyDaysAgo);
-      const attendedDaysLast30 = thirtyDayLogs.length;
-      const attendanceRate = attendedDaysLast30 / 30 * 100;
+      const workdaysSet = new Set(workdaysLast30Days.map(d => d.toISOString().split('T')[0]));
+      const attendedWorkdaysLast30 = sortedDates.filter(date => new Date(date) >= thirtyDaysAgo && workdaysSet.has(date));
+      const attendedDaysLast30Days = attendedWorkdaysLast30.length;
+      
+      const attendanceRate = workdaysLast30Days.length > 0 
+        ? (attendedDaysLast30Days / workdaysLast30Days.length) * 100 
+        : 0;
       
       let totalStayMinutes = 0;
       let stayCount = 0;
-      thirtyDayLogs.forEach(dateKey => {
+      sortedDates.filter(date => new Date(date) >= thirtyDaysAgo).forEach(dateKey => {
         const dayData = logsByDate.get(dateKey);
         if (dayData?.checkIn && dayData.checkOut && dayData.checkOut > dayData.checkIn) {
           totalStayMinutes += differenceInMinutes(dayData.checkOut, dayData.checkIn);
@@ -94,7 +106,9 @@ export function AttendanceStats({ user }: { user: AppUser }) {
         attendedDaysThisMonth,
         totalAttendedDays,
         attendanceRate,
-        averageStayDuration
+        averageStayDuration,
+        totalWorkdaysLast30Days: workdaysLast30Days.length,
+        attendedDaysLast30Days,
       });
 
     } catch (error) {
@@ -148,6 +162,10 @@ export function AttendanceStats({ user }: { user: AppUser }) {
                <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">出勤率 (対活動日)</span>
                   <span className="font-semibold">{stats.attendanceRate.toFixed(1)}%</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">出勤日数</span>
+                  <span className="font-semibold">{stats.attendedDaysLast30Days}日 / {stats.totalWorkdaysLast30Days}活動日</span>
               </div>
                <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">平均滞在時間</span>
