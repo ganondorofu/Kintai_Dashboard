@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -84,7 +85,7 @@ export const useAttendanceData = (currentDate: Date) => {
           [monthKey]: convertedData
         }));
         
-        setCacheStatus('cached');
+        setCacheStatus('fresh'); // Fetched fresh data
         console.log(`✅ 新データ構造: ${Object.keys(convertedData).length}日分 (${endTime - startTime}ms)`);
       } catch (error) {
         console.log('⚠️ 新しいデータ構造で失敗、従来版を試行:', error);
@@ -108,7 +109,7 @@ export const useAttendanceData = (currentDate: Date) => {
           [monthKey]: convertedData
         }));
         
-        setCacheStatus('cached');
+        setCacheStatus('fresh');
         console.log(`✅ 従来版: ${Object.keys(convertedData).length}日分 (${endTime - startTime}ms)`);
       }
     } catch (error) {

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { format } from 'date-fns';
@@ -6,6 +7,7 @@ import { ja } from 'date-fns/locale';
 interface CalendarHeaderProps {
   currentDate: Date;
   monthlyLoading: boolean;
+  cacheStatus: 'loading' | 'cached' | 'fresh';
   onNavigateMonth: (direction: 'prev' | 'next') => void;
   onRefresh?: () => void;
 }
@@ -13,6 +15,7 @@ interface CalendarHeaderProps {
 export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
   currentDate,
   monthlyLoading,
+  cacheStatus,
   onNavigateMonth,
   onRefresh
 }) => {
@@ -20,7 +23,7 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
     <div className="flex items-center justify-between mb-6">
       <h2 className="text-2xl font-bold">出席カレンダー</h2>
       <div className="flex items-center space-x-4">
-        {monthlyLoading && (
+        {monthlyLoading && cacheStatus === 'loading' && (
           <div className="text-sm text-gray-500 animate-pulse">データ取得中...</div>
         )}
         
@@ -32,9 +35,12 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
           ←
         </button>
         
-        <h3 className="text-lg font-semibold min-w-[120px] text-center">
-          {format(currentDate, 'yyyy年MM月', { locale: ja })}
-        </h3>
+        <div className="text-lg font-semibold min-w-[150px] text-center flex items-center justify-center">
+          <span>{format(currentDate, 'yyyy年MM月', { locale: ja })}</span>
+          {cacheStatus === 'cached' && !monthlyLoading && (
+              <span className="ml-2 text-xs text-blue-500">(キャッシュ)</span>
+          )}
+        </div>
         
         <button
           onClick={() => onNavigateMonth('next')}
