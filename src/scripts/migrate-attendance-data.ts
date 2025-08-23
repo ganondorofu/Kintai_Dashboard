@@ -1,4 +1,3 @@
-
 /**
  * 既存の出勤データを新しい階層構造に移行するスクリプト
  * 
@@ -11,7 +10,7 @@
  */
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import type { AttendanceLog } from '@/types';
 import path from 'path';
 import dotenv from 'dotenv';
