@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import MainSidebar from './main-sidebar';
 import { 
   Menu,
@@ -17,6 +17,11 @@ interface SidebarLayoutProps {
 export default function SidebarLayout({ children }: SidebarLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { cacheStatus } = useDashboard();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const getCacheStatusLabel = () => {
     switch (cacheStatus) {
@@ -72,7 +77,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
           </button>
           <div className="flex-1 px-6 flex justify-between items-center">
             <h1 className="text-xl font-semibold text-gray-900">STEM研究部勤怠管理システム</h1>
-            {statusLabel && (
+            {isClient && statusLabel && (
               <Badge variant={statusLabel.variant} className={statusLabel.className}>
                 {statusLabel.text}
               </Badge>
