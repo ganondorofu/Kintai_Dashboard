@@ -3,22 +3,22 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const { code } = await request.json();
-    const origin = request.headers.get('origin');
 
     if (!code) {
       return NextResponse.json({ error: 'Authorization code is required' }, { status: 400 });
     }
-    
-    if (!origin) {
-        return NextResponse.json({ error: 'Origin header is required' }, { status: 400 });
-    }
 
     const GITHUB_CLIENT_ID = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID!;
     const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET!;
-    const REDIRECT_URI = `${origin}/auth/callback`;
+    const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
+
+    if (!APP_URL) {
+      throw new Error("NEXT_PUBLIC_APP_URL is not set in the environment variables.");
+    }
+    
+    const REDIRECT_URI = `${APP_URL}/auth/callback`;
     
     console.log("Using Redirect URI for token exchange:", REDIRECT_URI);
-
 
     // Exchange code for access token
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
