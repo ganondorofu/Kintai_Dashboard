@@ -1,65 +1,70 @@
-rules_version = '2';
 
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ユーザー情報: 認証済みユーザーのみ読み取り可能
+
+    // 認証済みユーザーのみアクセスを許可
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // ドキュメントの所有者か確認
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // 管理者か確認
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ユーザー情報
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create: if isAuthenticated();
     }
-    
-    // 出退勤ログ（従来版）: 認証済みユーザーのみ読み取り可能、本人の記録は作成可能
-    match /attendance_logs/{logId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && 
-                   request.auth.uid == resource.data.uid;
-    }
-    
-        // 出退勤ログ（新しい階層構造）: /attendances/{dateKey}/logs/{logId}
-    match /attendances/{dateKey}/logs/{logId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && 
-                   request.auth.uid == resource.data.uid;
-    }
-    
-    // 年コレクション: 認証済みユーザーのみ読み取り可能
-    match /attendances/{year} {
-      allow read: if request.auth != null;
-    }
-    
-    // 月コレクション: 認証済みユーザーのみ読み取り可能
-    match /attendances/{year}/{month} {
-      allow read: if request.auth != null;
-    }
-    
-    // 日コレクション: 認証済みユーザーのみ読み取り可能
-    match /attendances/{year}/{month}/{day} {
-      allow read: if request.auth != null;
-    }
-    
-    // リンクリクエスト: 未認証ユーザーでも作成可能（QRコード連携用）
-    // 認証済みユーザーは読み取り・更新可能
-    match /link_requests/{requestId} {
-      allow create: if true; // Raspberry Pi側での未認証作成を許可
-      allow read, update: if request.auth != null;
-    }
-    
-    // チーム情報: 認証済みユーザーのみ読み取り可能
+
+    // チーム情報
     match /teams/{teamId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // 管理者権限は別途実装
+      allow read: if isAuthenticated();
+      allow write: if isAdmin(); // 管理者のみ書き込み可能
+    }
+
+    // 新しい階層型勤怠ログ
+    match /attendances/{date}/logs/{logId} {
+      allow read: if isAuthenticated() && (isOwner(get(resource.path).data.uid) || isAdmin());
+      allow create: if isAuthenticated();
+      // 更新と削除は原則許可しない
+      allow update, delete: if false; 
     }
     
-    // 労働日: 認証済みユーザーのみ読み取り可能
-    match /workdays/{workdayId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // 管理者権限は別途実装
+    // 従来の勤怠ログ（読み取り専用、移行措置）
+    match /attendance_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // 新規書き込みは禁止
     }
-    
-    // 月次サマリー: 認証済みユーザーのみ読み取り可能
+
+    // カード連携リクエスト
+    match /link_requests/{requestId} {
+      allow read: if true; // QRコード読み取りのため誰でも読み取り可
+      allow create: if true; // 誰でも作成可能
+      allow update: if isAuthenticated() && (isOwner(resource.data.uid) || isAdmin());
+    }
+
+    // 月次サマリーと労働日
     match /summary/{summaryId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // 管理者権限は別途実装
+      allow read: if isAuthenticated();
+      allow write: if isAdmin(); // 管理者権限を持つバックエンドからのみ
+    }
+    match /workdays/{workdayId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin(); // 管理者権限を持つバックエンドからのみ
+    }
+
+    // 月次キャッシュ
+    match /monthly_attendance_cache/{cacheId} {
+        allow read, write: if isAdmin(); // 管理者のみ
     }
   }
 }
