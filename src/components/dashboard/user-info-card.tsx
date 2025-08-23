@@ -4,6 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { AppUser } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { convertToJapaneseGrade } from '@/lib/utils';
 
 interface StatItemProps {
   label: string;
@@ -34,6 +35,7 @@ export const UserInfoCard: React.FC<UserInfoCardProps> = ({ user, teamName }) =>
       <CardContent>
         <div className="space-y-3">
           <StatItem label="名前" value={`${user.lastname} ${user.firstname}`} />
+          <StatItem label="学年" value={convertToJapaneseGrade(user.grade)} />
           <StatItem label="所属班" value={teamName || '未所属'} loading={isLoading} />
         </div>
       </CardContent>
