@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface AppUser {
@@ -81,3 +82,5 @@ export interface MonthlyAttendanceCache {
   lastLogCount: number;
   dataHash: string;
 }
+
+export type CacheStatus = 'idle' | 'loading' | 'cached' | 'fresh' | 'error';
