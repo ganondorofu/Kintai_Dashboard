@@ -36,17 +36,16 @@ export const useAttendanceData = (currentDate: Date) => {
   const fetchMonthlyData = useCallback(async (forceRefresh: boolean = false) => {
     const monthKey = getCurrentMonthKey();
     
-    // キャッシュチェック
-    if (!forceRefresh && monthlyCache[monthKey]) {
+    // キャッシュがあれば先に表示
+    if (monthlyCache[monthKey] && !forceRefresh) {
       console.log('💾 キャッシュから即座に取得:', monthKey);
       setMonthlyData(monthlyCache[monthKey]);
-      setCacheStatus('cached');
-      setMonthlyLoading(false);
-      return;
+      setCacheStatus('cached'); // まずキャッシュから表示したことを示す
     }
 
     setMonthlyLoading(true);
-    setCacheStatus('loading');
+    // キャッシュがあっても通信は行うのでloadingにする
+    setCacheStatus(prev => (prev === 'cached' ? 'loading' : 'loading'));
     
     try {
       console.log('📊 月次データを取得中...', format(currentDate, 'yyyy年MM月'));
@@ -62,7 +61,6 @@ export const useAttendanceData = (currentDate: Date) => {
       const monthlyStats = await calculateMonthlyAttendanceStatsWithCacheV2(year, month);
       const endTime = Date.now();
       
-      // MonthlyData形式に変換
       const convertedData: Record<string, MonthlyData> = {};
       Object.entries(monthlyStats).forEach(([dateKey, stats]) => {
         convertedData[dateKey] = {
@@ -73,19 +71,21 @@ export const useAttendanceData = (currentDate: Date) => {
       
       setMonthlyData(convertedData);
       
-      // キャッシュに保存
       setMonthlyCache(prev => ({
         ...prev,
         [monthKey]: convertedData
       }));
       
-      setCacheStatus('fresh'); // Fetched fresh data
+      setCacheStatus('fresh');
       console.log(`✅ 新データ構造: ${Object.keys(convertedData).length}日分 (${endTime - startTime}ms)`);
 
     } catch (error) {
       console.error('❌ 月次データ取得エラー:', error);
-      setMonthlyData({});
       setCacheStatus('error');
+      // エラーが発生しても、古いキャッシュがあればそれを表示し続ける
+      if (!monthlyCache[monthKey]) {
+        setMonthlyData({});
+      }
     } finally {
       setMonthlyLoading(false);
     }
@@ -93,46 +93,20 @@ export const useAttendanceData = (currentDate: Date) => {
 
   // 月が変わったら月次データを取得
   useEffect(() => {
-    const monthKey = getCurrentMonthKey();
-    
-    if (monthlyCache[monthKey]) {
-      console.log('🏃‍♂️ 月切り替え - キャッシュから即座にロード:', monthKey);
-      setMonthlyData(monthlyCache[monthKey]);
-      setCacheStatus('cached');
-      setMonthlyLoading(false);
-    } else {
-      console.log('📥 月切り替え - 新規取得が必要:', monthKey);
-      fetchMonthlyData();
-    }
-  }, [currentDate.getFullYear(), currentDate.getMonth(), fetchMonthlyData, getCurrentMonthKey, monthlyCache, setCacheStatus]);
+    fetchMonthlyData();
+  }, [currentDate.getFullYear(), currentDate.getMonth()]);
 
   // 日別統計を取得
   const fetchDayStats = useCallback(async (date: Date): Promise<DayStats[]> => {
     try {
-      // 月次データから取得を試行
       const dateKey = date.toDateString();
       const monthlyDayData = monthlyData[dateKey];
       
       if (monthlyDayData && monthlyDayData.teamStats) {
-        console.log('✅ 月次キャッシュから高速取得:', dateKey);
         return monthlyDayData.teamStats;
       }
 
-      // キャッシュにない場合：バックグラウンドで単日計算
-      console.log('⚡ バックグラウンドで単日計算:', dateKey);
       const stats = await getDailyAttendanceStatsV2(date);
-      
-      // 取得したデータを月次キャッシュに追加
-      setMonthlyData(prev => ({
-        ...prev,
-        [dateKey]: {
-          totalCount: stats.reduce((total, team) => 
-            total + (team.gradeStats ? team.gradeStats.reduce((teamTotal, grade) => teamTotal + (grade.count || 0), 0) : 0), 0
-          ),
-          teamStats: stats
-        }
-      }));
-      
       return stats;
       
     } catch (error) {
@@ -151,10 +125,8 @@ export const useAttendanceData = (currentDate: Date) => {
   return {
     monthlyData,
     monthlyLoading,
-    cacheStatus,
     fetchMonthlyData,
     fetchDayStats,
     getTotalAttendance,
-    monthlyCache
   };
 };
