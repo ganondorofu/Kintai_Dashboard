@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -18,10 +19,10 @@ import type { Team } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 
 const formSchema = z.object({
-  firstname: z.string().min(1, 'First name is required'),
-  lastname: z.string().min(1, 'Last name is required'),
-  teamId: z.string().min(1, 'Please select a team'),
-  grade: z.coerce.number().min(1, 'Grade is required'),
+  firstname: z.string().min(1, '名を入力してください'),
+  lastname: z.string().min(1, '姓を入力してください'),
+  teamId: z.string().min(1, '班を選択してください'),
+  grade: z.coerce.number().min(1, '期生を入力してください'),
 });
 
 type RegisterFormValues = z.infer<typeof formSchema>;
@@ -44,10 +45,10 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
         const fetchedTeams = await getAllTeams();
         setTeams(fetchedTeams);
       } catch (error) {
-        console.error("Failed to fetch teams:", error);
+        console.error("チーム情報の取得に失敗:", error);
         toast({
-          title: "Error",
-          description: "Could not load teams. Please try again later.",
+          title: "エラー",
+          description: "チーム情報を読み込めませんでした。後でもう一度お試しください。",
           variant: "destructive",
         });
       }
@@ -68,8 +69,8 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
   useEffect(() => {
     if (githubUser) {
       form.reset({
-        firstname: githubUser.name?.split(' ')[0] || '',
-        lastname: githubUser.name?.split(' ').slice(1).join(' ') || '',
+        firstname: githubUser.name?.split(' ')[1] || '',
+        lastname: githubUser.name?.split(' ')[0] || '',
       });
     }
   }, [githubUser, form]);
@@ -77,7 +78,7 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
 
   const onSubmit = async (values: RegisterFormValues) => {
     if (!firebaseUser || !githubUser) {
-      toast({ title: 'Authentication Error', description: 'User is not authenticated.', variant: 'destructive'});
+      toast({ title: '認証エラー', description: 'ユーザーが認証されていません。', variant: 'destructive'});
       return;
     }
 
@@ -118,11 +119,11 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
 
 
       setIsSuccess(true);
-      toast({ title: 'Registration Successful!', description: 'You can now use your card to log attendance.' });
+      toast({ title: '登録が完了しました！', description: 'カードを使って勤怠を記録できます。' });
 
     } catch (e: any) {
        console.error('[RegisterForm] Registration error:', e);
-       toast({ title: 'Registration Failed', description: e?.message || 'An unexpected error occurred. Please try again or contact an admin.', variant: 'destructive' });
+       toast({ title: '登録に失敗しました', description: e?.message || '予期せぬエラーが発生しました。管理者に連絡してください。', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -132,9 +133,9 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
     return (
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl text-primary">Registration Complete!</CardTitle>
+          <CardTitle className="text-2xl text-primary">登録完了！</CardTitle>
           <CardDescription>
-            You can now close this window.
+            このウィンドウを閉じてください。
           </CardDescription>
         </CardHeader>
       </Card>
@@ -144,9 +145,9 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle className="text-2xl">Complete Your Profile</CardTitle>
+        <CardTitle className="text-2xl">プロフィールを完成させる</CardTitle>
         <CardDescription>
-          Your GitHub account is authenticated. Please provide a few more details.
+          GitHubアカウントは認証済みです。追加情報を入力してください。
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -155,12 +156,12 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
             <div className="grid grid-cols-2 gap-4">
                 <FormField
                 control={form.control}
-                name="firstname"
+                name="lastname"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>First Name</FormLabel>
+                    <FormLabel>姓</FormLabel>
                     <FormControl>
-                        <Input placeholder="Taro" {...field} />
+                        <Input placeholder="山田" {...field} />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -168,12 +169,12 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
                 />
                 <FormField
                 control={form.control}
-                name="lastname"
+                name="firstname"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Last Name</FormLabel>
+                    <FormLabel>名</FormLabel>
                     <FormControl>
-                        <Input placeholder="Yamada" {...field} />
+                        <Input placeholder="太郎" {...field} />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -186,11 +187,11 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
               name="teamId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Team</FormLabel>
+                  <FormLabel>班</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select your team" />
+                        <SelectValue placeholder="所属している班を選択" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -209,7 +210,7 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
               name="grade"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Grade (e.g., 10 for 10th generation)</FormLabel>
+                  <FormLabel>期生 (例: 10期生は「10」)</FormLabel>
                   <FormControl>
                     <Input type="number" placeholder="10" {...field} />
                   </FormControl>
@@ -220,7 +221,7 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
             
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Complete Registration
+              登録を完了する
             </Button>
           </form>
         </Form>

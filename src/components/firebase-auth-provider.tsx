@@ -1,3 +1,4 @@
+
 "use client";
 
 import { createContext, useEffect, useState, ReactNode, useCallback } from "react";
@@ -29,12 +30,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInWithGitHub = useCallback(async () => {
     const provider = new GithubAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     try {
       await signInWithPopup(auth, provider);
       // onAuthStateChanged will handle the user state update.
     } catch (error: any) {
       console.error("Sign in with popup error", error);
-      toast({ title: 'Login Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'ログインエラー', description: error.message, variant: 'destructive' });
     }
   }, [toast]);
 

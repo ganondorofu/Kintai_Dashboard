@@ -36,7 +36,7 @@ function RegisterContent() {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground">Verifying authentication...</p>
+        <p className="text-muted-foreground">認証情報を確認中...</p>
       </div>
     );
   }
@@ -51,9 +51,9 @@ function RegisterContent() {
      return (
       <Card className="w-full max-w-md text-center">
         <CardHeader>
-          <CardTitle>Invalid Link</CardTitle>
+          <CardTitle>無効なリンク</CardTitle>
           <CardDescription>
-           This registration page requires a valid token and cardId from the kiosk. Please scan the QR code again.
+           この登録リンクは無効です。キオスク端末でQRコードを再スキャンしてください。
           </CardDescription>
         </CardHeader>
       </Card>
@@ -64,13 +64,13 @@ function RegisterContent() {
   return (
     <Card className="w-full max-w-md text-center">
       <CardHeader>
-        <CardTitle>Register Your Card</CardTitle>
-        <CardDescription>To continue, please log in with your GitHub account.</CardDescription>
+        <CardTitle>カードを登録</CardTitle>
+        <CardDescription>続けるには、GitHubアカウントでログインしてください。</CardDescription>
       </CardHeader>
       <CardContent>
         <Button onClick={handleSignIn} size="lg" className="w-full">
           <Github className="mr-2 h-5 w-5" />
-          Login with GitHub
+          GitHubでログイン
         </Button>
       </CardContent>
     </Card>
@@ -82,7 +82,7 @@ export default function RegisterPage() {
         <Suspense fallback={
           <div className="flex flex-col items-center gap-4 text-center">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="text-muted-foreground">Loading registration...</p>
+            <p className="text-muted-foreground">登録ページを読み込み中...</p>
           </div>
         }>
             <RegisterContent />
