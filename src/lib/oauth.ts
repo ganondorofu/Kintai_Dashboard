@@ -28,7 +28,11 @@ export const getGitHubAuthUrl = (): string => {
   if (!APP_URL) {
     throw new Error("NEXT_PUBLIC_APP_URL is not set. Please add it to your .env file.");
   }
-  const redirectUri = `${APP_URL}/auth/callback`;
+  
+  // Ensure the base URL has no trailing slash, then append the callback path.
+  const normalizedAppUrl = APP_URL.endsWith('/') ? APP_URL.slice(0, -1) : APP_URL;
+  const redirectUri = `${normalizedAppUrl}/auth/callback`;
+
   const params = new URLSearchParams({
     client_id: GITHUB_CLIENT_ID,
     redirect_uri: redirectUri,

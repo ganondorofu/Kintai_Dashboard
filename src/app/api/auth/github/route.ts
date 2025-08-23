@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
@@ -16,7 +17,9 @@ export async function POST(request: NextRequest) {
       throw new Error("NEXT_PUBLIC_APP_URL is not set in the environment variables.");
     }
     
-    const REDIRECT_URI = `${APP_URL}/auth/callback`;
+    // Ensure the base URL has no trailing slash, then append the callback path.
+    const normalizedAppUrl = APP_URL.endsWith('/') ? APP_URL.slice(0, -1) : APP_URL;
+    const REDIRECT_URI = `${normalizedAppUrl}/auth/callback`;
     
     console.log("Using Redirect URI for token exchange:", REDIRECT_URI);
 
