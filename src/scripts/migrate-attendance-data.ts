@@ -1,8 +1,9 @@
+
 /**
  * 既存の出勤データを新しい階層構造に移行するスクリプト
  * 
  * 従来: /attendance_logs/{logId}
- * 新規: /attendances/{年月}/{日付}/{logId}
+ * 新規: /attendances/{年月日}/logs/{logId}
  * 
  * 使用方法:
  * 1. Firebase Admin SDKの設定
