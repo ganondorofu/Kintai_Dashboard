@@ -24,7 +24,6 @@ export function AttendanceCalendar({ currentUser }: AttendanceCalendarProps) {
     fetchMonthlyData,
     fetchDayStats,
     getTotalAttendance,
-    cacheStatus,
   } = useAttendanceData(currentDate);
 
   // 月ナビゲーション
@@ -80,7 +79,6 @@ export function AttendanceCalendar({ currentUser }: AttendanceCalendarProps) {
         <CalendarHeader
           currentDate={currentDate}
           monthlyLoading={monthlyLoading}
-          cacheStatus={cacheStatus}
           onNavigateMonth={handleNavigateMonth}
           onRefresh={handleRefresh}
         />

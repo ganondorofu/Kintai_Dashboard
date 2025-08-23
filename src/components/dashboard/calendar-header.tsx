@@ -8,7 +8,6 @@ import { RefreshCw } from 'lucide-react';
 interface CalendarHeaderProps {
   currentDate: Date;
   monthlyLoading: boolean;
-  cacheStatus: 'loading' | 'cached' | 'fresh';
   onNavigateMonth: (direction: 'prev' | 'next') => void;
   onRefresh?: () => void;
 }
@@ -16,7 +15,6 @@ interface CalendarHeaderProps {
 export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
   currentDate,
   monthlyLoading,
-  cacheStatus,
   onNavigateMonth,
   onRefresh
 }) => {
