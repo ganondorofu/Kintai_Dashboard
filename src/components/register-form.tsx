@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
@@ -30,14 +29,14 @@ type RegisterFormValues = z.infer<typeof formSchema>;
 interface RegisterFormProps {
   token: string;
   cardId: string;
+  onRegistrationSuccess: () => void;
 }
 
-export default function RegisterForm({ token, cardId }: RegisterFormProps) {
+export default function RegisterForm({ token, cardId, onRegistrationSuccess }: RegisterFormProps) {
   const { user: firebaseUser, githubUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const [teams, setTeams] = useState<Team[]>([]);
-  const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
     const fetchTeams = async () => {
@@ -62,7 +61,7 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
       firstname: '',
       lastname: '',
       teamId: '',
-      grade: '' as any, // Initialize with empty string to avoid uncontrolled to controlled error
+      grade: '' as any,
     },
   });
 
@@ -118,9 +117,7 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
       }
       await setDoc(doc(db, 'link_requests', token), linkUpdateData, { merge: true });
 
-
-      setIsSuccess(true);
-      toast({ title: '登録が完了しました！', description: 'カードを使って勤怠を記録できます。' });
+      onRegistrationSuccess();
 
     } catch (e: any) {
        console.error('[RegisterForm] Registration error:', e);
@@ -130,103 +127,80 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
     }
   };
 
-   if (isSuccess) {
-    return (
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl text-primary">登録完了！</CardTitle>
-          <CardDescription>
-            このウィンドウを閉じてください。
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle className="text-2xl">プロフィールを完成させる</CardTitle>
-        <CardDescription>
-          GitHubアカウントは認証済みです。追加情報を入力してください。
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-                <FormField
-                control={form.control}
-                name="lastname"
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>姓</FormLabel>
-                    <FormControl>
-                        <Input placeholder="山田" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                    </FormItem>
-                )}
-                />
-                <FormField
-                control={form.control}
-                name="firstname"
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>名</FormLabel>
-                    <FormControl>
-                        <Input placeholder="太郎" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                    </FormItem>
-                )}
-                />
-            </div>
-            
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <div className="grid grid-cols-2 gap-4">
             <FormField
-              control={form.control}
-              name="teamId"
-              render={({ field }) => (
+            control={form.control}
+            name="lastname"
+            render={({ field }) => (
                 <FormItem>
-                  <FormLabel>班</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="所属している班を選択" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {teams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
+                <FormLabel>姓</FormLabel>
+                <FormControl>
+                    <Input placeholder="山田" {...field} />
+                </FormControl>
+                <FormMessage />
                 </FormItem>
-              )}
+            )}
             />
-            
             <FormField
-              control={form.control}
-              name="grade"
-              render={({ field }) => (
+            control={form.control}
+            name="firstname"
+            render={({ field }) => (
                 <FormItem>
-                  <FormLabel>期生 (例: 10期生は「10」)</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="10" {...field} />
-                  </FormControl>
-                  <FormMessage />
+                <FormLabel>名</FormLabel>
+                <FormControl>
+                    <Input placeholder="太郎" {...field} />
+                </FormControl>
+                <FormMessage />
                 </FormItem>
-              )}
+            )}
             />
-            
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              登録を完了する
-            </Button>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+        </div>
+        
+        <FormField
+          control={form.control}
+          name="teamId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>班</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="所属している班を選択" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {teams.map((team) => (
+                    <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        
+        <FormField
+          control={form.control}
+          name="grade"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>期生 (例: 10期生は「10」)</FormLabel>
+              <FormControl>
+                <Input type="number" placeholder="10" {...field} value={field.value || ''} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          登録を完了する
+        </Button>
+      </form>
+    </Form>
   );
 }
