@@ -8,6 +8,7 @@ import RegisterForm from '@/components/register-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Github } from 'lucide-react';
+import { useState } from 'react';
 
 function RegisterContent() {
   const router = useRouter();
@@ -15,15 +16,24 @@ function RegisterContent() {
   const token = searchParams.get('token');
   const cardId = searchParams.get('cardId');
   const { user, appUser, githubUser, loading, signInWithGitHub } = useAuth();
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   useEffect(() => {
     if(!loading && user && appUser) {
-        // Already fully logged in and registered, go to dashboard
-        router.push('/dashboard');
+        // Already fully logged in and registered, but on register page?
+        // Let's show a success message or redirect. For now, we assume
+        // the user is here to link a new card if they are already registered.
+        // The RegisterForm will handle this logic.
     }
   },[user, appUser, loading, router])
 
-  if (loading) {
+  const handleSignIn = async () => {
+    setIsSigningIn(true);
+    await signInWithGitHub();
+    setIsSigningIn(false);
+  }
+
+  if (loading || isSigningIn) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -59,7 +69,7 @@ function RegisterContent() {
         <CardDescription>To continue, please log in with your GitHub account.</CardDescription>
       </CardHeader>
       <CardContent>
-        <Button onClick={signInWithGitHub} size="lg" className="w-full">
+        <Button onClick={handleSignIn} size="lg" className="w-full">
           <Github className="mr-2 h-5 w-5" />
           Login with GitHub
         </Button>
