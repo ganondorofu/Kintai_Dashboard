@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatInTimeZone, zonedTimeToUtc, toZonedTime } from 'date-fns-tz';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import { startOfMonth, endOfMonth, differenceInMinutes, subMonths, addMonths } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { getUserAttendanceLogsV2, safeTimestampToDate } from '@/lib/data-adapter';
@@ -135,7 +135,7 @@ export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user }) => {
               {logs.map((log) => (
                 <tr key={log.date}>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                     {formatInTimeZone(zonedTimeToUtc(log.date, JST_TIMEZONE), JST_TIMEZONE, 'MM/dd(E)', { locale: ja })}
+                     {formatInTimeZone(toZonedTime(log.date, JST_TIMEZONE), JST_TIMEZONE, 'MM/dd(E)', { locale: ja })}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500 font-mono">
                     {log.checkInTime ? formatInTimeZone(log.checkInTime, JST_TIMEZONE, 'HH:mm') : '-'}
