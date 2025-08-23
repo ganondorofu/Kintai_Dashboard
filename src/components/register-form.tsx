@@ -62,7 +62,7 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
       firstname: '',
       lastname: '',
       teamId: '',
-      grade: undefined,
+      grade: '' as any, // Initialize with empty string to avoid uncontrolled to controlled error
     },
   });
 
@@ -71,6 +71,8 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
       form.reset({
         firstname: githubUser.name?.split(' ')[1] || '',
         lastname: githubUser.name?.split(' ')[0] || '',
+        teamId: '',
+        grade: '' as any,
       });
     }
   }, [githubUser, form]);
@@ -87,7 +89,6 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
     try {
       const uid = firebaseUser.uid;
       const userDocRef = doc(db, 'users', uid);
-      const linkRequestRef = doc(db, 'link_requests', token);
       
       const userData = {
         uid: uid,
