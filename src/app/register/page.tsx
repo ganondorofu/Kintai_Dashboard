@@ -6,9 +6,10 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import RegisterForm from '@/components/register-form';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Github } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Loader2, Github, LogOut, User } from 'lucide-react';
 import { updateLinkRequestStatus } from '@/lib/data-adapter';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 
 function RegisterContent() {
@@ -16,7 +17,7 @@ function RegisterContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const cardId = searchParams.get('cardId');
-  const { user, appUser, githubUser, loading, signInWithGitHub } = useAuth();
+  const { user, githubUser, loading, signInWithGitHub, signOut } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   useEffect(() => {
@@ -34,9 +35,22 @@ function RegisterContent() {
     } finally {
       setIsSigningIn(false);
     }
+  };
+
+  const handleSwitchAccount = async () => {
+    await signOut();
+    await handleSignIn();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center gap-4 text-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-muted-foreground">認証情報を確認中...</p>
+      </div>
+    );
   }
 
-  // URLパラメータがない場合はエラー表示
   if (!token || !cardId) {
     return (
      <Card className="w-full max-w-md text-center">
@@ -50,22 +64,40 @@ function RegisterContent() {
    );
  }
 
-  // 認証状態が確定するまでローディング表示を維持
-  if (loading || isSigningIn) {
+  if (user && githubUser) {
+    // 登録済みかどうかをチェックするロジックはRegisterFormに任せる
+    // ここでは、ログインしているアカウント情報を表示し、アカウント切り替えの選択肢を与える
     return (
-      <div className="flex flex-col items-center gap-4 text-center">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground">認証情報を確認中...</p>
-      </div>
+       <Card className="w-full max-w-md">
+         <CardHeader>
+           <CardTitle>プロフィールを完成させる</CardTitle>
+           <CardDescription>
+             以下のGitHubアカウントでログインしています。このアカウントで登録を続けますか？
+           </CardDescription>
+         </CardHeader>
+         <CardContent className="space-y-4">
+            <div className="flex items-center gap-4 rounded-lg border p-4">
+                <Avatar>
+                    <AvatarImage src={githubUser.avatar_url} alt={githubUser.login} />
+                    <AvatarFallback><User /></AvatarFallback>
+                </Avatar>
+                <div>
+                    <p className="font-semibold">{githubUser.name || githubUser.login}</p>
+                    <p className="text-sm text-muted-foreground">{githubUser.email}</p>
+                </div>
+            </div>
+            <RegisterForm token={token} cardId={cardId} />
+         </CardContent>
+         <CardFooter className="flex-col gap-2">
+            <Button variant="outline" className="w-full" onClick={handleSwitchAccount}>
+                <LogOut className="mr-2 h-4 w-4" />
+                別のアカウントでログイン
+            </Button>
+         </CardFooter>
+       </Card>
     );
   }
-
-  // 認証済みの場合、登録フォームを表示
-  if (user && githubUser) {
-    return <RegisterForm token={token} cardId={cardId} />;
-  }
   
-  // 未認証の場合、ログインボタンを表示
   return (
     <Card className="w-full max-w-md text-center">
       <CardHeader>
