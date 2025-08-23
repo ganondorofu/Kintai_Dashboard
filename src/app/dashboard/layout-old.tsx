@@ -23,7 +23,7 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace('/login');
+      router.replace('/');
     }
   }, [loading, user, router]);
 
@@ -37,7 +37,7 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     // await firebaseSignOut();
-    router.push('/login');
+    router.push('/');
   };
   
   const getInitials = (lastname: string, firstname: string) => {
@@ -54,7 +54,7 @@ export default function DashboardLayout({
               <AvatarFallback>{getInitials(user.lastname, user.firstname)}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
-              <span className="font-semibold">{user.lastname} {user.firstname}</span>
+              <span className="font-semibold">{user.firstname} {user.lastname}</span>
               <span className="text-sm text-muted-foreground">{user.github}</span>
             </div>
           </div>

@@ -19,7 +19,7 @@ export default function AdminPage() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 space-y-6">
         <h1 className="text-3xl font-bold text-gray-900">管理者画面</h1>
         <p className="text-lg text-gray-600">ログインが必要です</p>
-        <Link href="/login">
+        <Link href="/">
           <Button size="lg">ログイン</Button>
         </Link>
       </div>

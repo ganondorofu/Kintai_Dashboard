@@ -138,7 +138,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
   const handleSignOut = async () => {
     try {
       await signOut();
-      router.push('/login');
+      router.push('/');
       onClose?.();
     } catch (error) {
       console.error('ログアウトエラー:', error);
