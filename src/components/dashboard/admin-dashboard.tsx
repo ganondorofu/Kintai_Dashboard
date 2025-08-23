@@ -5,16 +5,82 @@ import { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { TeamManagement } from './team-management';
 import { AttendanceCalendar } from './attendance-calendar';
-import { forceClockOutAllUsers } from '@/lib/data-adapter';
+import { collection, query, where, getDocs, writeBatch, doc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { generateAttendanceLogId } from '@/lib/data-adapter';
+import type { AppUser } from '@/types';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+
+// getAttendancePathを直接定義
+const getAttendancePath = (date: Date): { year: string, month: string, day: string } => {
+  const jstDate = new Date(date.getTime());
+  const year = jstDate.getFullYear().toString();
+  const month = (jstDate.getMonth() + 1).toString().padStart(2, '0');
+  const day = jstDate.getDate().toString().padStart(2, '0');
+  
+  return { year, month, day };
+};
+
 
 export default function AdminDashboard() {
   const { appUser } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'users' | 'calendar'>('users');
   const [isForcingCheckout, setIsForcingCheckout] = useState(false);
+
+  // forceClockOutAllUsers関数をコンポーネント内に移動
+  const forceClockOutAllUsers = async (): Promise<{ success: number; failed: number; noAction: number; }> => {
+    let success = 0;
+    let failed = 0;
+    let noAction = 0;
+
+    try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('status', '==', 'active'));
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+            return { success, failed, noAction };
+        }
+
+        const batch = writeBatch(db);
+        const now = new Date();
+        const { year, month, day } = getAttendancePath(now);
+        const dateKey = `${year}-${month}-${day}`;
+
+        snapshot.forEach(userDoc => {
+            const userData = userDoc.data() as AppUser;
+            const userId = userDoc.id;
+
+            const logId = generateAttendanceLogId(userId);
+            const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
+            batch.set(newLogRef, {
+                uid: userId,
+                type: 'exit',
+                timestamp: serverTimestamp(),
+                cardId: 'force_checkout'
+            });
+
+            const userRef = doc(db, 'users', userId);
+            batch.update(userRef, {
+                status: 'inactive',
+                last_activity: serverTimestamp()
+            });
+
+            success++;
+        });
+
+        await batch.commit();
+
+    } catch (error) {
+        console.error("強制退勤処理エラー:", error);
+        failed = snapshot.size - success;
+    }
+    
+    return { success, failed, noAction };
+};
 
   const handleForceCheckout = async () => {
     setIsForcingCheckout(true);
@@ -24,7 +90,6 @@ export default function AdminDashboard() {
         title: "強制退勤処理が完了しました",
         description: `成功: ${result.success}件, 対象外: ${result.noAction}件, 失敗: ${result.failed}件`,
       });
-      // You might want to refresh data here if needed
     } catch (error) {
       console.error('強制退勤エラー:', error);
       toast({
