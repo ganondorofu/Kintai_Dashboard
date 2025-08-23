@@ -85,7 +85,7 @@ export const useAttendanceData = (currentDate: Date) => {
     } catch (error) {
       console.error('❌ 月次データ取得エラー:', error);
       setMonthlyData({});
-      setCacheStatus('fresh');
+      setCacheStatus('error');
     } finally {
       setMonthlyLoading(false);
     }
