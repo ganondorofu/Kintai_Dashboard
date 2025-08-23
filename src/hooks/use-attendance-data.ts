@@ -23,7 +23,7 @@ export interface MonthlyData {
 }
 
 export const useAttendanceData = (currentDate: Date) => {
-  const { monthlyCache, setMonthlyCache, setCacheStatus, cacheStatus } = useDashboard();
+  const { monthlyCache, setMonthlyCache, setCacheStatus } = useDashboard();
   const [monthlyData, setMonthlyData] = useState<Record<string, MonthlyData>>({});
   const [monthlyLoading, setMonthlyLoading] = useState(false);
   
@@ -37,7 +37,7 @@ export const useAttendanceData = (currentDate: Date) => {
     const monthKey = getCurrentMonthKey();
     
     // キャッシュがあれば先に表示
-    if (monthlyCache[monthKey] && !forceRefresh) {
+    if (monthlyCache && monthlyCache[monthKey] && !forceRefresh) {
       console.log('💾 キャッシュから即座に取得:', monthKey);
       setMonthlyData(monthlyCache[monthKey]);
       setCacheStatus('cached'); // まずキャッシュから表示したことを示す
@@ -83,7 +83,7 @@ export const useAttendanceData = (currentDate: Date) => {
       console.error('❌ 月次データ取得エラー:', error);
       setCacheStatus('error');
       // エラーが発生しても、古いキャッシュがあればそれを表示し続ける
-      if (!monthlyCache[monthKey]) {
+      if (!monthlyCache || !monthlyCache[monthKey]) {
         setMonthlyData({});
       }
     } finally {
