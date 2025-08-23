@@ -40,8 +40,8 @@ export default function DashboardLayout({
     router.push('/login');
   };
   
-  const getInitials = (firstname: string, lastname: string) => {
-    return `${firstname.charAt(0)}${lastname.charAt(0)}`.toUpperCase();
+  const getInitials = (lastname: string, firstname: string) => {
+    return `${lastname.charAt(0)}${firstname.charAt(0)}`.toUpperCase();
   }
 
   return (
@@ -50,11 +50,11 @@ export default function DashboardLayout({
         <SidebarHeader>
           <div className="flex items-center gap-3">
             <Avatar>
-              <AvatarImage src={user.avatarUrl ?? undefined} alt={`${user.firstname} ${user.lastname}`} />
-              <AvatarFallback>{getInitials(user.firstname, user.lastname)}</AvatarFallback>
+              <AvatarImage src={user.avatarUrl ?? undefined} alt={`${user.lastname} ${user.firstname}`} />
+              <AvatarFallback>{getInitials(user.lastname, user.firstname)}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
-              <span className="font-semibold">{user.firstname} {user.lastname}</span>
+              <span className="font-semibold">{user.lastname} {user.firstname}</span>
               <span className="text-sm text-muted-foreground">{user.github}</span>
             </div>
           </div>
