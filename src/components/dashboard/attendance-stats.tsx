@@ -3,95 +3,99 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getUserAttendanceLogsV2, getWorkdaysInRange, safeTimestampToDate } from '@/lib/data-adapter';
-import type { AppUser, AttendanceLog } from '@/types';
-import { Calendar, Clock, TrendingUp, History } from 'lucide-react';
-import { format, subDays, differenceInMinutes, startOfMonth } from 'date-fns';
+import { getUserAttendanceLogsV2, safeTimestampToDate } from '@/lib/data-adapter';
+import type { AppUser } from '@/types';
+import { format, subDays, differenceInMinutes, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-interface AttendanceStatsProps {
-  user: AppUser;
+interface Stats {
+  lastAttendedDate: string | null;
+  attendedDaysThisMonth: number;
+  totalAttendedDays: number;
+  attendanceRate: number;
+  averageStayDuration: string;
 }
 
-export function AttendanceStats({ user }: AttendanceStatsProps) {
-  const [stats, setStats] = useState({
-    attendedDays: 0,
-    totalWorkdays: 0,
-    attendanceRate: 0,
-    averageCheckInTime: '--:--',
-    totalWorkHours: 0,
-  });
+export function AttendanceStats({ user }: { user: AppUser }) {
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
   const calculateStats = useCallback(async () => {
     setLoading(true);
     try {
-        const now = new Date();
-        const thirtyDaysAgo = subDays(now, 30);
-        
-        const [thirtyDayLogs, workdays] = await Promise.all([
-          getUserAttendanceLogsV2(user.uid, thirtyDaysAgo, now, 1000),
-          getWorkdaysInRange(thirtyDaysAgo, now)
-        ]);
-        const totalWorkdays = workdays.length;
-        const workdaysSet = new Set(workdays.map(d => d.toISOString().split('T')[0]));
+      const now = new Date();
+      const thirtyDaysAgo = subDays(now, 30);
+      const allLogs = await getUserAttendanceLogsV2(user.uid, new Date(0), now, 9999);
 
-        const logsByDate = new Map<string, { checkIn: Date | null, checkOut: Date | null }>();
-
-        thirtyDayLogs.forEach(log => {
-          const logDate = safeTimestampToDate(log.timestamp);
-          if (!logDate) return;
-          const dateKey = format(logDate, 'yyyy-MM-dd');
-          
-          if (!logsByDate.has(dateKey)) {
-            logsByDate.set(dateKey, { checkIn: null, checkOut: null });
-          }
-
-          const dayData = logsByDate.get(dateKey)!;
-
-          if (log.type === 'entry') {
-            if (!dayData.checkIn || logDate < dayData.checkIn) {
-              dayData.checkIn = logDate;
-            }
-          } else if (log.type === 'exit') {
-            if (!dayData.checkOut || logDate > dayData.checkOut) {
-              dayData.checkOut = logDate;
-            }
-          }
+      if (allLogs.length === 0) {
+        setStats({
+          lastAttendedDate: null,
+          attendedDaysThisMonth: 0,
+          totalAttendedDays: 0,
+          attendanceRate: 0,
+          averageStayDuration: '0時間0分',
         });
-
-        const attendedDays = Array.from(logsByDate.keys()).filter(dateKey => workdaysSet.has(dateKey) && logsByDate.get(dateKey)?.checkIn).length;
-        const attendanceRate = totalWorkdays > 0 ? (attendedDays / totalWorkdays) * 100 : 0;
+        setLoading(false);
+        return;
+      }
+      
+      const logsByDate = new Map<string, { checkIn: Date | null, checkOut: Date | null }>();
+      allLogs.forEach(log => {
+        const logDate = safeTimestampToDate(log.timestamp);
+        if (!logDate) return;
+        const dateKey = format(logDate, 'yyyy-MM-dd');
         
-        let totalMinutes = 0;
-        const checkInTimes: number[] = [];
-
-        logsByDate.forEach((dayData) => {
-          if (dayData.checkIn && dayData.checkOut && dayData.checkOut > dayData.checkIn) {
-            totalMinutes += differenceInMinutes(dayData.checkOut, dayData.checkIn);
-          }
-          if (dayData.checkIn) {
-            checkInTimes.push(dayData.checkIn.getHours() * 60 + dayData.checkIn.getMinutes());
-          }
-        });
-        
-        const totalWorkHours = totalMinutes > 0 ? Math.floor(totalMinutes / 60) : 0;
-        
-        let averageCheckInTime = '--:--';
-        if (checkInTimes.length > 0) {
-            const avgTimeInMs = checkInTimes.reduce((sum, time) => sum + time, 0) / checkInTimes.length;
-            const hours = Math.floor(avgTimeInMs / 60);
-            const minutes = Math.round(avgTimeInMs % 60);
-            averageCheckInTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        if (!logsByDate.has(dateKey)) {
+          logsByDate.set(dateKey, { checkIn: null, checkOut: null });
         }
 
-        setStats({
-            attendedDays,
-            totalWorkdays,
-            attendanceRate,
-            averageCheckInTime,
-            totalWorkHours,
-        });
+        const dayData = logsByDate.get(dateKey)!;
+
+        if (log.type === 'entry') {
+          if (!dayData.checkIn || logDate < dayData.checkIn) {
+            dayData.checkIn = logDate;
+          }
+        } else if (log.type === 'exit') {
+          if (!dayData.checkOut || logDate > dayData.checkOut) {
+            dayData.checkOut = logDate;
+          }
+        }
+      });
+      
+      const sortedDates = Array.from(logsByDate.keys()).sort((a,b) => b.localeCompare(a));
+      const lastAttendedDate = sortedDates.length > 0 ? format(new Date(sortedDates[0]), 'yyyy/MM/dd') : null;
+
+      const currentMonthLogs = sortedDates.filter(date => isSameDay(startOfMonth(new Date(date)), startOfMonth(now)));
+      const attendedDaysThisMonth = currentMonthLogs.length;
+
+      const totalAttendedDays = sortedDates.length;
+
+      const thirtyDayLogs = sortedDates.filter(date => new Date(date) >= thirtyDaysAgo);
+      const attendedDaysLast30 = thirtyDayLogs.length;
+      const attendanceRate = attendedDaysLast30 / 30 * 100;
+      
+      let totalStayMinutes = 0;
+      let stayCount = 0;
+      thirtyDayLogs.forEach(dateKey => {
+        const dayData = logsByDate.get(dateKey);
+        if (dayData?.checkIn && dayData.checkOut && dayData.checkOut > dayData.checkIn) {
+          totalStayMinutes += differenceInMinutes(dayData.checkOut, dayData.checkIn);
+          stayCount++;
+        }
+      });
+      
+      const avgMinutes = stayCount > 0 ? totalStayMinutes / stayCount : 0;
+      const avgHours = Math.floor(avgMinutes / 60);
+      const avgRemainingMinutes = Math.round(avgMinutes % 60);
+      const averageStayDuration = `${avgHours}時間${avgRemainingMinutes}分`;
+
+      setStats({
+        lastAttendedDate,
+        attendedDaysThisMonth,
+        totalAttendedDays,
+        attendanceRate,
+        averageStayDuration
+      });
 
     } catch (error) {
       console.error('統計データの計算に失敗:', error);
@@ -106,57 +110,51 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
   
   if (loading) {
     return (
-        <Card>
-            <CardContent className="h-96 animate-pulse bg-gray-100 rounded-lg p-6" />
-        </Card>
+        <>
+            <Card className="animate-pulse"><CardContent className="h-24" /></Card>
+            <Card className="animate-pulse"><CardContent className="h-24" /></Card>
+        </>
     );
   }
 
+  if (!stats) return null;
+
   return (
-    <Card>
-        <CardHeader><CardTitle>勤務統計</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">出勤率 (対活動日)</CardTitle>
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{stats.attendanceRate.toFixed(0)}%</div>
-                    <p className="text-xs text-muted-foreground">過去30日間</p>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">出勤日数</CardTitle>
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{stats.attendedDays}日</div>
-                    <p className="text-xs text-muted-foreground">{stats.totalWorkdays}活動日中</p>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">平均チェックイン</CardTitle>
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{stats.averageCheckInTime}</div>
-                    <p className="text-xs text-muted-foreground">過去30日間の平均</p>
-                </CardContent>
-            </Card>
-             <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">総労働時間</CardTitle>
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{stats.totalWorkHours}h</div>
-                    <p className="text-xs text-muted-foreground">過去30日間</p>
-                </CardContent>
-            </Card>
-        </CardContent>
-    </Card>
+    <>
+      <Card>
+          <CardHeader>
+              <CardTitle>勤務状況</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+              <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">前回出勤日</span>
+                  <span className="font-semibold">{stats.lastAttendedDate || '-'}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">今月の出勤日数</span>
+                  <span className="font-semibold">{stats.attendedDaysThisMonth}日</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">累計出勤日数</span>
+                  <span className="font-semibold">{stats.totalAttendedDays}日</span>
+              </div>
+          </CardContent>
+      </Card>
+       <Card>
+          <CardHeader>
+              <CardTitle>勤務統計 (過去30日)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+               <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">出勤率 (対活動日)</span>
+                  <span className="font-semibold">{stats.attendanceRate.toFixed(1)}%</span>
+              </div>
+               <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">平均滞在時間</span>
+                  <span className="font-semibold">{stats.averageStayDuration}</span>
+              </div>
+          </CardContent>
+      </Card>
+    </>
   );
 }
