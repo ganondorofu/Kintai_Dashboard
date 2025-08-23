@@ -49,8 +49,17 @@ function AuthCallbackContent() {
 
         setStatus('success');
         
+        // 元のURLから登録トークンを取得
+        const originalUrl = new URL(window.location.href);
+        const token = originalUrl.searchParams.get('token');
+        const cardId = originalUrl.searchParams.get('cardId');
+        
+        const registerUrl = new URL('/register', window.location.origin);
+        if (token) registerUrl.searchParams.set('token', token);
+        if (cardId) registerUrl.searchParams.set('cardId', cardId);
+
         // 登録ページにリダイレクト
-        router.push('/register');
+        router.push(registerUrl.toString());
         
       } catch (err: any) {
         console.error('OAuth callback error:', err);

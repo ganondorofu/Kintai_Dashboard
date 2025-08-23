@@ -1,4 +1,5 @@
 
+
 import { updateDoc, query, collection, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import type { LinkRequest } from '@/types';
@@ -20,13 +21,13 @@ export interface OAuthTokens {
 }
 
 const GITHUB_CLIENT_ID = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID!;
-const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`;
 
 // GitHub OAuth認証URLを生成
 export const getGitHubAuthUrl = (): string => {
+  const redirectUri = `${window.location.origin}/auth/callback`;
   const params = new URLSearchParams({
     client_id: GITHUB_CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: redirectUri,
     scope: 'read:user user:email read:org',
     state: generateRandomState(),
   });
