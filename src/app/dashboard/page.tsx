@@ -18,7 +18,7 @@ export default function DashboardPage() {
     // ユーザーがログインしていない場合の表示
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 space-y-6">
-        <h1 className="text-3xl font-bold text-gray-900">IT勤怠管理システム</h1>
+        <h1 className="text-3xl font-bold text-gray-900">STEM研究部勤怠管理システム</h1>
         <p className="text-lg text-gray-600">ログインが必要です</p>
         <div className="flex gap-4">
           <Link href="/">

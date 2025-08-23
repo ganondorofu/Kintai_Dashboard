@@ -16,7 +16,7 @@ type AttendanceType = 'entry' | 'exit';
 
 export default function KioskPageV2() {
   const [mode, setMode] = useState<KioskMode>('waiting');
-  const [message, setMessage] = useState('NFCタグをタッチしてください');
+  const [message, setMessage] = useState('NFCカードをタッチしてください');
   const [subMessage, setSubMessage] = useState('');
   const [cardId, setCardId] = useState<string | null>(null);
   const [userInfo, setUserInfo] = useState<any>(null);
@@ -27,7 +27,7 @@ export default function KioskPageV2() {
 
   const resetToWaiting = useCallback(() => {
     setMode('waiting');
-    setMessage('NFCタグをタッチしてください');
+    setMessage('NFCカードをタッチしてください');
     setSubMessage('');
     setCardId(null);
     setUserInfo(null);
@@ -185,7 +185,7 @@ export default function KioskPageV2() {
           </div>
           
           <CardTitle className="text-2xl font-bold text-gray-900">
-            IT勤怠管理システム
+            STEM研究部勤怠管理システム
           </CardTitle>
           
           <div className="text-lg font-mono bg-gray-100 rounded p-3 mt-4">
@@ -210,7 +210,7 @@ export default function KioskPageV2() {
                   {message}
                 </h2>
                 <p className="text-gray-600">
-                  NFCタグをタッチするか、カードIDを入力してください
+                  NFCカードをタッチするか、カードIDを入力してください
                 </p>
               </div>
             </div>

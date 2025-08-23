@@ -4,8 +4,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/components/firebase-auth-provider';
 
 export const metadata: Metadata = {
-  title: 'IT勤怠管理システム',
-  description: 'IT部の勤怠管理システム',
+  title: 'STEM研究部勤怠管理システム',
+  description: 'STEM研究部のための勤怠管理システム',
 };
 
 export default function RootLayout({
