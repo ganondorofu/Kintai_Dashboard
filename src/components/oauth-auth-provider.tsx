@@ -1,129 +1,140 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
-import { getStoredAuthData, clearAuthData, validateToken, GitHubUser, OAuthTokens } from "@/lib/oauth";
+import type { User as FirebaseUser } from "firebase/auth";
+import { onAuthStateChanged, GithubAuthProvider, getRedirectResult, signInWithRedirect } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
 import { useToast } from '@/hooks/use-toast';
 import type { AppUser } from "@/types";
+import type { GitHubUser } from "@/lib/github";
 import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 
 interface AuthContextType {
-  user: GitHubUser | null;
+  user: FirebaseUser | null;
+  githubUser: GitHubUser | null;
   appUser: AppUser | null;
   loading: boolean;
   accessToken: string | null;
-  signOut: () => void;
+  signInWithGitHub: () => void;
+  signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  appUser: null,
-  loading: true,
-  accessToken: null,
-  signOut: () => {},
-});
-
-export { AuthContext };
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider = ({ children }: AuthProviderProps) => {
-  const [user, setUser] = useState<GitHubUser | null>(null);
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [githubUser, setGithubUser] = useState<GitHubUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  const signInWithGitHub = useCallback(() => {
+    setLoading(true);
+    const provider = new GithubAuthProvider();
+    provider.addScope('read:org');
+    signInWithRedirect(auth, provider).catch(error => {
+      console.error("Sign in with redirect error", error);
+      toast({ title: 'Login Error', description: error.message, variant: 'destructive' });
+      setLoading(false);
+    });
+  }, [toast]);
+
+  const signOut = useCallback(async () => {
+    setLoading(true);
+    try {
+      await auth.signOut();
+      setUser(null);
+      setAppUser(null);
+      setGithubUser(null);
+      setAccessToken(null);
+      sessionStorage.clear();
+      localStorage.clear();
+    } catch (error: any) {
+      console.error("Sign out error", error);
+      toast({ title: 'Logout Error', description: error.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
-    const initializeAuth = async () => {
-      console.log("[AuthProvider] Initializing auth...");
-      try {
-        const { tokens, user: storedUser } = getStoredAuthData();
-        
-        if (tokens && storedUser) {
-          console.log("[AuthProvider] Found stored auth data.");
-          const isValid = await validateToken(tokens.access_token);
-          
-          if (isValid) {
-            console.log('[AuthProvider] Valid token found, setting user');
-            setUser(storedUser);
-            setAccessToken(tokens.access_token);
-          } else {
-            console.log('[AuthProvider] Invalid token, clearing auth data');
-            clearAuthData();
-            setUser(null);
-            setAccessToken(null);
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          const credential = GithubAuthProvider.credentialFromResult(result);
+          if (credential?.accessToken) {
+            const token = credential.accessToken;
+            setAccessToken(token);
+            sessionStorage.setItem('github_access_token', token);
           }
-        } else {
-          console.log('[AuthProvider] No stored auth data found');
-          setUser(null);
-          setAccessToken(null);
+          const ghUser = result.user.providerData.find(p => p.providerId === 'github.com');
+          if (ghUser) {
+             setGithubUser({
+                id: parseInt(ghUser.uid, 10),
+                login: ghUser.displayName || '',
+                name: ghUser.displayName || '',
+                email: ghUser.email || '',
+                avatar_url: ghUser.photoURL || '',
+             });
+          }
         }
-      } catch (error) {
-        console.error('[AuthProvider] Error initializing auth:', error);
-        clearAuthData();
-      } finally {
-        // This will be handled by the next useEffect,
-        // which depends on the user state.
+      })
+      .catch((error) => {
+        console.error("Get redirect result error:", error);
+        toast({ title: "Authentication Error", description: error.message, variant: "destructive" });
+      });
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (!currentUser) {
+        setAppUser(null);
+        setGithubUser(null);
+        setAccessToken(null);
+        setLoading(false);
+      } else {
+        const token = sessionStorage.getItem('github_access_token');
+        if(token) {
+          setAccessToken(token);
+        }
       }
-    };
+    });
 
-    initializeAuth();
-  }, []);
-
+    return () => unsubscribeAuth();
+  }, [toast]);
+  
   useEffect(() => {
-    let unsubscribe: () => void = () => {};
-
-    if (user) {
-      const uid = user.id.toString();
-      console.log('[AuthProvider] User authenticated, fetching Firestore data for uid:', uid);
-      const userDocRef = doc(db, "users", uid);
-      unsubscribe = onSnapshot(
-        userDocRef,
-        (doc) => {
-          if (doc.exists()) {
-            console.log('[AuthProvider] Firestore user data found');
-            setAppUser({ uid: doc.id, ...doc.data() } as AppUser);
-          } else {
-            console.log('[AuthProvider] No Firestore user data found for uid:', uid);
-            setAppUser(null);
-          }
-          setLoading(false);
-        },
-        (error) => {
-          console.error("Error fetching user data:", error);
-          setAppUser(null);
-          setLoading(false);
+    if (user?.uid) {
+      const userDocRef = doc(db, 'users', user.uid);
+      const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+          setAppUser({ uid: doc.id, ...doc.data() } as AppUser);
+        } else {
+          setAppUser(null); 
         }
-      );
+        setLoading(false);
+      }, (error) => {
+        console.error("Firestore user snapshot error:", error);
+        setAppUser(null);
+        setLoading(false);
+      });
+
+      return () => unsubscribeUser();
     } else {
-        console.log('[AuthProvider] No user, setting loading to false.');
         setLoading(false);
     }
-    return () => unsubscribe();
   }, [user]);
 
-  const signOut = useCallback(() => {
-    console.log('[AuthProvider] Signing out user');
-    clearAuthData();
-    setUser(null);
-    setAppUser(null);
-    setAccessToken(null);
-    setLoading(false);
-  }, []);
-
   return (
-    <AuthContext.Provider value={{ user, appUser, loading, accessToken, signOut }}>
+    <AuthContext.Provider value={{ user, githubUser, appUser, loading, accessToken, signInWithGitHub, signOut }}>
       {children}
     </AuthContext.Provider>
   );

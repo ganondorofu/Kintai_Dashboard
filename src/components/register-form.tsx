@@ -11,12 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { collection, doc, getDocs, query, serverTimestamp, where, writeBatch, updateDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { isMemberOfOrg } from '@/lib/github';
 import { getAllTeams } from '@/lib/data-adapter';
 import type { Team } from '@/types';
-import type { GitHubUser } from '@/lib/oauth';
+import { useAuth } from '@/hooks/use-auth';
 
 const formSchema = z.object({
   firstname: z.string().min(1, 'First name is required'),
@@ -28,15 +27,16 @@ const formSchema = z.object({
 type RegisterFormValues = z.infer<typeof formSchema>;
 
 interface RegisterFormProps {
-  user: GitHubUser;
-  accessToken: string;
   token: string;
+  cardId: string;
 }
 
-export default function RegisterForm({ user, accessToken, token }: RegisterFormProps) {
+export default function RegisterForm({ token, cardId }: RegisterFormProps) {
+  const { user: firebaseUser, githubUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const [teams, setTeams] = useState<Team[]>([]);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
     const fetchTeams = async () => {
@@ -58,120 +58,61 @@ export default function RegisterForm({ user, accessToken, token }: RegisterFormP
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      firstname: user.name?.split(' ')[0] || '',
-      lastname: user.name?.split(' ').slice(1).join(' ') || '',
+      firstname: githubUser?.name?.split(' ')[0] || '',
+      lastname: githubUser?.name?.split(' ').slice(1).join(' ') || '',
       teamId: '',
       grade: undefined,
     },
   });
 
   const onSubmit = async (values: RegisterFormValues) => {
+    if (!firebaseUser || !githubUser) {
+      toast({ title: 'Authentication Error', description: 'User is not authenticated.', variant: 'destructive'});
+      return;
+    }
+
     setLoading(true);
-    
-    // 1. Verify GitHub Organization Membership
-    const requiredOrg = process.env.NEXT_PUBLIC_GITHUB_ORG_NAME;
-    const altOrg = process.env.NEXT_PUBLIC_GITHUB_ALT_ORG_NAME;
-    const requiredOrgs = [requiredOrg, altOrg].filter(Boolean) as string[];
-
-    if (requiredOrgs.length === 0) {
-      toast({ title: 'Configuration Error', description: 'GitHub organization is not configured.', variant: 'destructive' });
-      setLoading(false);
-      return;
-    }
-
-    let member = false;
-    console.log('[RegisterForm] Checking GitHub token availability:', accessToken ? 'Token available' : 'No token');
-    console.log('[RegisterForm] Required orgs:', requiredOrgs);
-    
-    try {
-      member = await isMemberOfOrg(accessToken, requiredOrgs);
-      console.log('[RegisterForm] Organization check result:', member);
-    } catch (err: any) {
-      console.error('[RegisterForm] GitHub org check failed:', err);
-      toast({ title: 'Verification Error', description: 'Unable to verify GitHub organization membership. Please try again.', variant: 'destructive' });
-      setLoading(false);
-      return;
-    }
-    if (!member) {
-      toast({ title: 'Access Denied', description: `You are not a member of the required GitHub organizations.`, variant: 'destructive' });
-      setLoading(false);
-      return;
-    }
 
     try {
-      // 2. Find the link request
-      const linkRequestsRef = collection(db, 'link_requests');
-      const q = query(linkRequestsRef, where('token', '==', token));
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) {
-        toast({ title: 'Registration Failed', description: 'Invalid or expired registration link.', variant: 'destructive' });
-        setLoading(false);
-        return;
-      }
-      const linkRequestDoc = querySnapshot.docs[0];
-      const cardId = new URLSearchParams(window.location.search).get('cardId');
-      if(!cardId) {
-        throw new Error('Card ID not found in URL.');
-      }
-      
-      const uid = user.id.toString();
-
-      // 3. Create or update user document
+      const uid = firebaseUser.uid;
       const userDocRef = doc(db, 'users', uid);
       const userData = {
         uid: uid,
-        github: user.email || user.login,
-        githubLogin: user.login,
-        githubId: user.id,
-        name: user.name || user.login,
-        avatarUrl: user.avatar_url,
+        github: githubUser.email || githubUser.login,
+        githubLogin: githubUser.login,
+        githubId: githubUser.id,
+        name: githubUser.name || githubUser.login,
+        avatarUrl: githubUser.avatar_url,
         cardId: cardId,
         firstname: values.firstname,
         lastname: values.lastname,
         teamId: values.teamId,
         grade: values.grade,
         role: 'user', // Default role
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
-      
-      const batch = writeBatch(db);
-      
-      batch.set(userDocRef, userData, { merge: true });
 
-      // 4. Update the link request
-      batch.update(linkRequestDoc.ref, {
-        status: 'done',
-        uid: uid,
-        updatedAt: serverTimestamp(),
-        cardId: cardId,
-      });
+      await setDoc(userDocRef, userData);
 
-  // 5. Commit the batch
-  await batch.commit();
-
-  // Clear session storage token after successful use
-  try { sessionStorage.removeItem('github_access_token'); } catch (e) {}
-
-  toast({ title: 'Registration Successful!', description: 'You can now use your card to log attendance.' });
-  form.reset();
+      setIsSuccess(true);
+      toast({ title: 'Registration Successful!', description: 'You can now use your card to log attendance.' });
 
     } catch (e: any) {
-   console.error('[RegisterForm] Registration error:', e);
-   // Show friendly message, avoid leaking internal error details
-   toast({ title: 'Registration Failed', description: e?.message || 'An unexpected error occurred. Please try again or contact an admin.', variant: 'destructive' });
+       console.error('[RegisterForm] Registration error:', e);
+       toast({ title: 'Registration Failed', description: e?.message || 'An unexpected error occurred. Please try again or contact an admin.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
-  
-   if (form.formState.isSubmitSuccessful) {
+
+   if (isSuccess) {
     return (
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl text-primary">Registration Complete!</CardTitle>
           <CardDescription>
-            You can now close this window and use your NFC tag at the kiosk.
+            You can now close this window.
           </CardDescription>
         </CardHeader>
       </Card>
