@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getAllTeams } from '@/lib/data-adapter';
 import type { Team } from '@/types';
@@ -58,12 +58,22 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      firstname: githubUser?.name?.split(' ')[0] || '',
-      lastname: githubUser?.name?.split(' ').slice(1).join(' ') || '',
+      firstname: '',
+      lastname: '',
       teamId: '',
       grade: undefined,
     },
   });
+
+  useEffect(() => {
+    if (githubUser) {
+      form.reset({
+        firstname: githubUser.name?.split(' ')[0] || '',
+        lastname: githubUser.name?.split(' ').slice(1).join(' ') || '',
+      });
+    }
+  }, [githubUser, form]);
+
 
   const onSubmit = async (values: RegisterFormValues) => {
     if (!firebaseUser || !githubUser) {
@@ -76,6 +86,8 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
     try {
       const uid = firebaseUser.uid;
       const userDocRef = doc(db, 'users', uid);
+      const linkRequestRef = doc(db, 'link_requests', token);
+      
       const userData = {
         uid: uid,
         github: githubUser.email || githubUser.login,
@@ -94,6 +106,16 @@ export default function RegisterForm({ token, cardId }: RegisterFormProps) {
       };
 
       await setDoc(userDocRef, userData);
+
+      // Update link request
+      const linkUpdateData = {
+          status: 'done',
+          uid: uid,
+          github: githubUser.login,
+          updatedAt: serverTimestamp()
+      }
+      await setDoc(doc(db, 'link_requests', token), linkUpdateData, { merge: true });
+
 
       setIsSuccess(true);
       toast({ title: 'Registration Successful!', description: 'You can now use your card to log attendance.' });
