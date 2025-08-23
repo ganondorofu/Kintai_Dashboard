@@ -4,8 +4,10 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { getTeamMembers, getTeamAttendanceLogs, getAllUsers, getAllTeams, updateUser, formatKisei } from '@/lib/data-adapter';
+import { getTeamMembers, getTeamAttendanceLogs, getAllUsers, getAllTeams, updateUser, formatKisei, createAttendanceLogV2 } from '@/lib/data-adapter';
 import type { AppUser, AttendanceLog, Team } from '@/types';
+import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 
 interface TeamManagementProps {
   currentUser: AppUser;
@@ -18,32 +20,33 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
   const [teamLogs, setTeamLogs] = useState<AttendanceLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+  const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const isAdmin = currentUser.role === 'admin';
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [fetchedTeams, fetchedUsers] = await Promise.all([
+        getAllTeams(),
+        isAdmin ? getAllUsers() : getTeamMembers(currentUser.teamId || '')
+      ]);
+      
+      setTeams(fetchedTeams);
+      setUsers(fetchedUsers);
+      
+      if (!isAdmin && currentUser.teamId) {
+        setSelectedTeam(currentUser.teamId);
+      }
+    } catch (error) {
+      console.error('データ取得エラー:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [fetchedTeams, fetchedUsers] = await Promise.all([
-          getAllTeams(),
-          isAdmin ? getAllUsers() : getTeamMembers(currentUser.teamId || '')
-        ]);
-        
-        setTeams(fetchedTeams);
-        setUsers(fetchedUsers);
-        
-        // デフォルトで自分のチームを選択
-        if (!isAdmin && currentUser.teamId) {
-          setSelectedTeam(currentUser.teamId);
-        }
-      } catch (error) {
-        console.error('データ取得エラー:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, [currentUser, isAdmin]);
 
@@ -69,8 +72,28 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
         user.uid === uid ? { ...user, ...updates } : user
       ));
       setEditingUser(null);
+      toast({ title: '成功', description: 'ユーザー情報が更新されました。' });
     } catch (error) {
       console.error('ユーザー更新エラー:', error);
+      toast({ title: 'エラー', description: 'ユーザー情報の更新に失敗しました。', variant: 'destructive' });
+    }
+  };
+
+  const handleManualAttendance = async (user: AppUser, type: 'entry' | 'exit') => {
+    setIsProcessing(user.uid);
+    try {
+      await createAttendanceLogV2(user.uid, type, 'manual_admin');
+      toast({
+        title: '成功',
+        description: `${user.lastname} ${user.firstname}さんを${type === 'entry' ? '出勤' : '退勤'}させました。`,
+      });
+      // Refresh data to show updated status
+      await fetchData();
+    } catch (error) {
+      console.error('手動勤怠記録エラー:', error);
+      toast({ title: 'エラー', description: '手動での勤怠記録に失敗しました。', variant: 'destructive' });
+    } finally {
+      setIsProcessing(null);
     }
   };
 
@@ -112,7 +135,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
         )}
       </div>
 
-      {/* ユーザー一覧 */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
         <div className="px-4 py-5 sm:p-6">
           <h3 className="text-lg font-medium mb-4">
@@ -123,60 +145,45 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    名前
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    GitHub
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    学年
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    班
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    役割
-                  </th>
-                  {isAdmin && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      操作
-                    </th>
-                  )}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名前</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学年</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">班</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
+                  {isAdmin && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">手動操作</th>}
+                  {isAdmin && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">編集</th>}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredUsers.map((user) => (
                   <tr key={user.uid}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {user.lastname} {user.firstname}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.github}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatKisei(user.grade || 10)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.teamId ? getTeamName(user.teamId) : '未配属'}
-                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.lastname} {user.firstname}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatKisei(user.grade || 10)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.teamId ? getTeamName(user.teamId) : '未配属'}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        user.role === 'admin' 
-                          ? 'bg-purple-100 text-purple-800' 
-                          : 'bg-green-100 text-green-800'
+                        user.status === 'active' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {user.role === 'admin' ? '管理者' : 'ユーザー'}
+                        {user.status === 'active' ? '出勤中' : '退勤済み'}
                       </span>
                     </td>
                     {isAdmin && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                        {user.status !== 'active' ? (
+                          <Button size="sm" variant="outline" onClick={() => handleManualAttendance(user, 'entry')} disabled={isProcessing === user.uid}>
+                            {isProcessing === user.uid ? '処理中...' : '出勤させる'}
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="destructive" onClick={() => handleManualAttendance(user, 'exit')} disabled={isProcessing === user.uid}>
+                             {isProcessing === user.uid ? '処理中...' : '退勤させる'}
+                          </Button>
+                        )}
+                      </td>
+                    )}
+                    {isAdmin && (
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <button
-                          onClick={() => setEditingUser(user)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          編集
-                        </button>
+                        <Button variant="link" onClick={() => setEditingUser(user)}>編集</Button>
                       </td>
                     )}
                   </tr>
@@ -187,67 +194,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
         </div>
       </div>
 
-      {/* チーム勤怠ログ */}
-      {selectedTeam && (
-        <div className="bg-white shadow rounded-lg overflow-hidden">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg font-medium mb-4">
-              {getTeamName(selectedTeam)} 勤怠ログ
-            </h3>
-            
-            {teamLogs.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        ユーザー
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        日時
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        種別
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {teamLogs.slice(0, 20).map((log) => {
-                      const user = users.find(u => u.uid === log.uid);
-                      return (
-                        <tr key={log.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {user ? `${user.lastname} ${user.firstname}` : log.uid}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.timestamp && typeof log.timestamp.toDate === 'function' 
-                              ? format(log.timestamp.toDate(), 'MM/dd HH:mm', { locale: ja })
-                              : '不明'
-                            }
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              log.type === 'entry' 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-red-100 text-red-800'
-                            }`}>
-                              {log.type === 'entry' ? '入室' : '退室'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-gray-500">勤怠ログがありません</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ユーザー編集モーダル */}
       {editingUser && isAdmin && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
