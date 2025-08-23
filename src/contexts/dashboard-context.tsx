@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
@@ -26,6 +27,10 @@ interface DashboardContextType {
   
   // データ取得関数
   clearCache: () => void;
+
+  // デバッグ用
+  cacheStatus: 'loading' | 'cached' | 'fresh';
+  setCacheStatus: React.Dispatch<React.SetStateAction<'loading' | 'cached' | 'fresh'>>;
 }
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
@@ -36,6 +41,8 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [cacheStatus, setCacheStatus] = useState<'loading' | 'cached' | 'fresh'>('fresh');
+
 
   // 初期データの取得
   useEffect(() => {
@@ -84,6 +91,8 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     isLoading,
     setIsLoading,
     clearCache,
+    cacheStatus,
+    setCacheStatus,
   };
 
   return (

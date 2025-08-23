@@ -4,13 +4,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { 
-  getDailyAttendanceStats, 
   getDailyAttendanceStatsV2, 
-  calculateMonthlyAttendanceStatsWithCache, 
   calculateMonthlyAttendanceStatsWithCacheV2, 
   invalidateMonthlyCache 
 } from '@/lib/data-adapter';
 import type { AppUser } from '@/types';
+import { useDashboard } from '@/contexts/dashboard-context';
 
 export interface DayStats {
   teamId: string;
@@ -24,13 +23,10 @@ export interface MonthlyData {
 }
 
 export const useAttendanceData = (currentDate: Date) => {
+  const { monthlyCache, setMonthlyCache, setCacheStatus, cacheStatus } = useDashboard();
   const [monthlyData, setMonthlyData] = useState<Record<string, MonthlyData>>({});
   const [monthlyLoading, setMonthlyLoading] = useState(false);
-  const [cacheStatus, setCacheStatus] = useState<'loading' | 'cached' | 'fresh'>('loading');
   
-  // 月ごとのキャッシュ管理
-  const [monthlyCache, setMonthlyCache] = useState<Record<string, Record<string, MonthlyData>>>({});
-
   // 現在の月のキー生成
   const getCurrentMonthKey = useCallback((date: Date = currentDate) => {
     return `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
@@ -62,56 +58,30 @@ export const useAttendanceData = (currentDate: Date) => {
         await invalidateMonthlyCache(year, month);
       }
       
-      // 新しいデータ構造から取得を試行
-      try {
-        const startTime = Date.now();
-        const monthlyStats = await calculateMonthlyAttendanceStatsWithCacheV2(year, month);
-        const endTime = Date.now();
-        
-        // MonthlyData形式に変換
-        const convertedData: Record<string, MonthlyData> = {};
-        Object.entries(monthlyStats).forEach(([dateKey, stats]) => {
-          convertedData[dateKey] = {
-            totalCount: stats.totalCount,
-            teamStats: stats.teamStats
-          };
-        });
-        
-        setMonthlyData(convertedData);
-        
-        // キャッシュに保存
-        setMonthlyCache(prev => ({
-          ...prev,
-          [monthKey]: convertedData
-        }));
-        
-        setCacheStatus('fresh'); // Fetched fresh data
-        console.log(`✅ 新データ構造: ${Object.keys(convertedData).length}日分 (${endTime - startTime}ms)`);
-      } catch (error) {
-        console.log('⚠️ 新しいデータ構造で失敗、従来版を試行:', error);
-        
-        const startTime = Date.now();
-        const monthlyStats = await calculateMonthlyAttendanceStatsWithCache(year, month);
-        const endTime = Date.now();
-        
-        const convertedData: Record<string, MonthlyData> = {};
-        Object.entries(monthlyStats).forEach(([dateKey, stats]) => {
-          convertedData[dateKey] = {
-            totalCount: stats.totalCount,
-            teamStats: stats.teamStats
-          };
-        });
-        
-        setMonthlyData(convertedData);
-        
-        setMonthlyCache(prev => ({
-          ...prev,
-          [monthKey]: convertedData
-        }));
-        
-        setCacheStatus('fresh');
-        console.log(`✅ 従来版: ${Object.keys(convertedData).length}日分 (${endTime - startTime}ms)`);
-      }
+      const startTime = Date.now();
+      const monthlyStats = await calculateMonthlyAttendanceStatsWithCacheV2(year, month);
+      const endTime = Date.now();
+      
+      // MonthlyData形式に変換
+      const convertedData: Record<string, MonthlyData> = {};
+      Object.entries(monthlyStats).forEach(([dateKey, stats]) => {
+        convertedData[dateKey] = {
+          totalCount: stats.totalCount,
+          teamStats: stats.teamStats
+        };
+      });
+      
+      setMonthlyData(convertedData);
+      
+      // キャッシュに保存
+      setMonthlyCache(prev => ({
+        ...prev,
+        [monthKey]: convertedData
+      }));
+      
+      setCacheStatus('fresh'); // Fetched fresh data
+      console.log(`✅ 新データ構造: ${Object.keys(convertedData).length}日分 (${endTime - startTime}ms)`);
+
     } catch (error) {
       console.error('❌ 月次データ取得エラー:', error);
       setMonthlyData({});
@@ -119,7 +89,7 @@ export const useAttendanceData = (currentDate: Date) => {
     } finally {
       setMonthlyLoading(false);
     }
-  }, [currentDate, getCurrentMonthKey, monthlyCache]);
+  }, [currentDate, getCurrentMonthKey, monthlyCache, setMonthlyCache, setCacheStatus]);
 
   // 月が変わったら月次データを取得
   useEffect(() => {
@@ -134,7 +104,7 @@ export const useAttendanceData = (currentDate: Date) => {
       console.log('📥 月切り替え - 新規取得が必要:', monthKey);
       fetchMonthlyData();
     }
-  }, [currentDate.getFullYear(), currentDate.getMonth(), fetchMonthlyData, getCurrentMonthKey, monthlyCache]);
+  }, [currentDate.getFullYear(), currentDate.getMonth(), fetchMonthlyData, getCurrentMonthKey, monthlyCache, setCacheStatus]);
 
   // 日別統計を取得
   const fetchDayStats = useCallback(async (date: Date): Promise<DayStats[]> => {
@@ -150,37 +120,21 @@ export const useAttendanceData = (currentDate: Date) => {
 
       // キャッシュにない場合：バックグラウンドで単日計算
       console.log('⚡ バックグラウンドで単日計算:', dateKey);
-      try {
-        const stats = await getDailyAttendanceStatsV2(date);
-        
-        // 取得したデータを月次キャッシュに追加
-        setMonthlyData(prev => ({
-          ...prev,
-          [dateKey]: {
-            totalCount: stats.reduce((total, team) => 
-              total + (team.gradeStats ? team.gradeStats.reduce((teamTotal, grade) => teamTotal + (grade.count || 0), 0) : 0), 0
-            ),
-            teamStats: stats
-          }
-        }));
-        
-        return stats;
-      } catch (error) {
-        console.log('新しいデータ構造で失敗、従来版を試行:', error);
-        const stats = await getDailyAttendanceStats(date);
-        
-        setMonthlyData(prev => ({
-          ...prev,
-          [dateKey]: {
-            totalCount: stats.reduce((total, team) => 
-              total + team.gradeStats.reduce((teamTotal, grade) => teamTotal + grade.count, 0), 0
-            ),
-            teamStats: stats
-          }
-        }));
-        
-        return stats;
-      }
+      const stats = await getDailyAttendanceStatsV2(date);
+      
+      // 取得したデータを月次キャッシュに追加
+      setMonthlyData(prev => ({
+        ...prev,
+        [dateKey]: {
+          totalCount: stats.reduce((total, team) => 
+            total + (team.gradeStats ? team.gradeStats.reduce((teamTotal, grade) => teamTotal + (grade.count || 0), 0) : 0), 0
+          ),
+          teamStats: stats
+        }
+      }));
+      
+      return stats;
+      
     } catch (error) {
       console.error('日別統計取得エラー:', error);
       return [];

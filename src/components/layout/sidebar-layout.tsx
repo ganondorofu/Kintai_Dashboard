@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -6,6 +7,8 @@ import {
   Menu,
   X,
 } from 'lucide-react';
+import { useDashboard } from '@/contexts/dashboard-context';
+import { Badge } from '@/components/ui/badge';
 
 interface SidebarLayoutProps {
   children: React.ReactNode;
@@ -13,6 +16,22 @@ interface SidebarLayoutProps {
 
 export default function SidebarLayout({ children }: SidebarLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { cacheStatus } = useDashboard();
+
+  const getCacheStatusLabel = () => {
+    switch (cacheStatus) {
+      case 'loading':
+        return { text: '通信中...', variant: 'default' as const, className: 'bg-yellow-500 text-white animate-pulse' };
+      case 'cached':
+        return { text: 'キャッシュ', variant: 'outline' as const, className: 'border-blue-500 text-blue-600' };
+      case 'fresh':
+        return { text: '最新', variant: 'default' as const, className: 'bg-green-500 text-white' };
+      default:
+        return null;
+    }
+  }
+
+  const statusLabel = getCacheStatusLabel();
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -51,6 +70,11 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
           </button>
           <div className="flex-1 px-6 flex justify-between items-center">
             <h1 className="text-xl font-semibold text-gray-900">STEM研究部勤怠管理システム</h1>
+            {statusLabel && (
+              <Badge variant={statusLabel.variant} className={statusLabel.className}>
+                {statusLabel.text}
+              </Badge>
+            )}
           </div>
         </div>
 
