@@ -226,7 +226,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
                           onClick={() => handleMemberClick(member.uid)}
                         >
                           <span className="text-gray-600 truncate text-left">
-                            {member.firstname} {member.lastname}
+                            {member.lastname} {member.firstname}
                           </span>
                           <Badge 
                             variant={member.isPresent ? "default" : "outline"}

@@ -131,12 +131,12 @@ export default function MemberStatsPage() {
         <div className="flex items-center space-x-4">
           <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
             <span className="text-lg font-medium text-gray-700">
-              {user.firstname?.[0]}{user.lastname?.[0]}
+              {user.lastname?.[0]}{user.firstname?.[0]}
             </span>
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {user.firstname} {user.lastname}
+              {user.lastname} {user.firstname}
             </h1>
             <p className="text-gray-600">
               {convertToJapaneseGrade(user.grade)} | {user.email}

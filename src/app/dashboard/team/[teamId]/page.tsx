@@ -214,7 +214,7 @@ export default function TeamStatsPage() {
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
                       <span className="text-sm font-medium text-gray-700">
-                        {member.firstname?.[0]}{member.lastname?.[0]}
+                        {member.lastname?.[0]}{member.firstname?.[0]}
                       </span>
                     </div>
                     <div>
@@ -222,7 +222,7 @@ export default function TeamStatsPage() {
                         className="font-medium text-gray-900 hover:text-blue-600 hover:underline transition-colors"
                         onClick={() => router.push(`/dashboard/member/${member.uid}`)}
                       >
-                        {member.firstname} {member.lastname}
+                        {member.lastname} {member.firstname}
                       </button>
                       <p className="text-sm text-gray-500">{member.github}</p>
                     </div>
