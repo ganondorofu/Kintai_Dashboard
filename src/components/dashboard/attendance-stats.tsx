@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -23,18 +24,18 @@ export function AttendanceStats({ user }: { user: AppUser }) {
   const [error, setError] = useState<string | null>(null);
 
   const calculateStats = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const now = new Date();
       const thirtyDaysAgo = subDays(now, 30);
       const startOfCurrentMonth = startOfMonth(now);
 
-      const [logsLast30Days, workdaysLast30Days, totalLogs] = await Promise.all([
-        getUserAttendanceLogsV2(user.uid, thirtyDaysAgo, now, 1000),
-        getWorkdaysInRange(thirtyDaysAgo, now),
-        getUserAttendanceLogsV2(user.uid, new Date(0), now, 9999),
-      ]);
+      // 過去30日間のログを十分に取得
+      const logsLast30Days = await getUserAttendanceLogsV2(user.uid, thirtyDaysAgo, now, 1000);
+      // 全期間のログも取得（累計日数計算用）
+      const totalLogs = await getUserAttendanceLogsV2(user.uid, new Date(0), now, 9999);
+      // 過去30日間の活動日を取得
+      const workdaysLast30Days = await getWorkdaysInRange(thirtyDaysAgo, now);
       
       const logsByDate = new Map<string, { checkIn: Date | null, checkOut: Date | null }>();
       
@@ -84,7 +85,6 @@ export function AttendanceStats({ user }: { user: AppUser }) {
       let totalStayMinutes = 0;
       let stayCount = 0;
       
-      // 30日分のログで滞在時間を計算
       const logsByDateForDuration = new Map<string, { checkIn: Date | null, checkOut: Date | null }>();
       logsLast30Days.forEach(log => {
         const logDate = safeTimestampToDate(log.timestamp);
