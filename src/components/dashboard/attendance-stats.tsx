@@ -35,10 +35,15 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
           getUserAttendanceLogsV2(user.uid, thirtyDaysAgo, now, 1000),
           getWorkdaysInRange(thirtyDaysAgo, now)
         ]);
+        const totalWorkdays = workdays.length;
 
         const allTimeDates = new Set(allTimeLogs.filter(log => log.type === 'entry').map(log => format(safeTimestampToDate(log.timestamp)!, 'yyyy-MM-dd')));
 
-        const thirtyDayDates = new Set(thirtyDayLogs.filter(log => log.type === 'entry').map(log => format(safeTimestampToDate(log.timestamp)!, 'yyyy-MM-dd')));
+        const thirtyDayAttended = thirtyDayLogs.filter(log => {
+            const logDate = safeTimestampToDate(log.timestamp);
+            return log.type === 'entry' && logDate && workdays.some(workday => workday.toISOString().split('T')[0] === logDate.toISOString().split('T')[0]);
+        });
+        const thirtyDayAttendedDates = new Set(thirtyDayAttended.map(log => format(safeTimestampToDate(log.timestamp)!, 'yyyy-MM-dd')));
 
         const monthlyLogs = allTimeLogs.filter(log => {
             const logDate = safeTimestampToDate(log.timestamp);
@@ -65,7 +70,7 @@ export function AttendanceStats({ user }: AttendanceStatsProps) {
 
         const totalMinutes = workDurations.reduce((acc, cur) => acc + cur, 0);
         const averageWorkMinutes = workDurations.length > 0 ? totalMinutes / workDurations.length : 0;
-        const attendanceRate = workdays.length > 0 ? (thirtyDayDates.size / workdays.length) * 100 : 0;
+        const attendanceRate = totalWorkdays > 0 ? (thirtyDayAttendedDates.size / totalWorkdays) * 100 : 0;
         const lastCheckInDate = allTimeDates.size > 0 ? format(new Date(Math.max(...Array.from(allTimeDates).map(d => new Date(d).getTime()))), 'yyyy/MM/dd') : '-';
 
         setStats({

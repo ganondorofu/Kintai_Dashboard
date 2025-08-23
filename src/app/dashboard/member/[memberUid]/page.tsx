@@ -7,13 +7,14 @@ import { ArrowLeft, User, Calendar, Clock, TrendingUp, MapPin } from 'lucide-rea
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { getAllUsers, getUserAttendanceRecords } from '@/lib/data-adapter';
+import { getAllUsers, getUserAttendanceRecords, getWorkdaysInRange } from '@/lib/data-adapter';
 import { convertToJapaneseGrade } from '@/lib/utils';
 import type { User as UserType, AttendanceLog } from '@/types';
+import { subDays } from 'date-fns';
 
 interface MemberStats {
   user: UserType;
-  totalDays: number;
+  totalWorkdays: number;
   attendedDays: number;
   attendanceRate: number;
   recentAttendance: AttendanceLog[];
@@ -41,12 +42,15 @@ export default function MemberStatsPage() {
           return;
         }
 
+        const thirtyDaysAgo = subDays(new Date(), 30);
+        const workdays = await getWorkdaysInRange(thirtyDaysAgo, new Date());
+        const totalWorkdays = workdays.length;
+        const workdaysSet = new Set(workdays.map(d => d.toISOString().split('T')[0]));
+
         const attendanceRecords = await getUserAttendanceRecords(member.uid, 30);
         
-        // 過去30日間のデータを分析
-        const totalDays = 30;
-        const attendedDays = attendanceRecords.filter(record => record.checkInTime).length;
-        const attendanceRate = Math.round((attendedDays / totalDays) * 100);
+        const attendedDays = attendanceRecords.filter(record => record.checkInTime && workdaysSet.has(record.date)).length;
+        const attendanceRate = totalWorkdays > 0 ? Math.round((attendedDays / totalWorkdays) * 100) : 0;
 
         // 平均チェックイン時間を計算
         const checkInTimes = attendanceRecords
@@ -69,7 +73,7 @@ export default function MemberStatsPage() {
 
         setMemberStats({
           user: member,
-          totalDays,
+          totalWorkdays,
           attendedDays,
           attendanceRate,
           recentAttendance: attendanceRecords.slice(0, 10), // 最新10件
@@ -83,7 +87,9 @@ export default function MemberStatsPage() {
       }
     };
 
-    fetchMemberStats();
+    if (memberUid) {
+      fetchMemberStats();
+    }
   }, [memberUid]);
 
   if (loading) {
@@ -118,7 +124,7 @@ export default function MemberStatsPage() {
     );
   }
 
-  const { user, totalDays, attendedDays, attendanceRate, recentAttendance, averageCheckInTime, totalWorkHours } = memberStats;
+  const { user, totalWorkdays, attendedDays, attendanceRate, recentAttendance, averageCheckInTime, totalWorkHours } = memberStats;
 
   return (
     <div className="p-6 space-y-6">
@@ -149,7 +155,7 @@ export default function MemberStatsPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">出勤率</CardTitle>
+            <CardTitle className="text-sm font-medium">出勤率 (対活動日)</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -165,7 +171,7 @@ export default function MemberStatsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{attendedDays}日</div>
-            <p className="text-xs text-muted-foreground">{totalDays}日中</p>
+            <p className="text-xs text-muted-foreground">{totalWorkdays}活動日中</p>
           </CardContent>
         </Card>
 
