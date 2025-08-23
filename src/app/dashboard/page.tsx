@@ -21,7 +21,7 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold text-gray-900">IT勤怠管理システム</h1>
         <p className="text-lg text-gray-600">ログインが必要です</p>
         <div className="flex gap-4">
-          <Link href="/login">
+          <Link href="/">
             <Button size="lg">ログイン</Button>
           </Link>
         </div>
