@@ -1,4 +1,4 @@
-# IT勤怠管理システム
+# STEM研究部勤怠管理システム
 
 IT学生向けの包括的な勤怠管理システムです。Firebase/Firestoreを基盤とした現代的なWebアプリケーションです。
 
@@ -57,37 +57,37 @@ IT学生向けの包括的な勤怠管理システムです。Firebase/Firestore
 - GitHub OAuth App
 
 ### インストール
-\`\`\`bash
+```bash
 npm install
-\`\`\`
+```
 
 ### 環境変数設定
-\`.env.local\` ファイルを作成：
-\`\`\`env
+`.env.local` ファイルを作成：
+```env
 # Firebase データ用設定
 NEXT_PUBLIC_FIREBASE_DATA_PROJECT_ID=your-project-id
 NEXT_PUBLIC_FIREBASE_DATA_API_KEY=your-api-key
 # ... その他の設定
-\`\`\`
+```
 
 ### 開発サーバー起動
-\`\`\`bash
+```bash
 npm run dev
-\`\`\`
+```
 
 ### データマイグレーション
-\`\`\`bash
+```bash
 npm run migrate:attendance
-\`\`\`
+```
 
 ## 🔧 管理
 
 ### Firebase Admin SDK設定
 マイグレーション実行には以下が必要：
 1. Firebase Service Account Key
-2. プロジェクトルートに \`firebase-service-account-key.json\` を配置
+2. プロジェクトルートに `firebase-service-account-key.json` を配置
 
-詳細は \`docs/firebase-admin-setup.md\` を参照。
+詳細は `docs/firebase-admin-setup.md` を参照。
 
 ## 📊 パフォーマンス
 
@@ -99,20 +99,20 @@ npm run migrate:attendance
 ## 🚀 デプロイ
 
 ### Vercel
-\`\`\`bash
+```bash
 npm run build
 vercel deploy
-\`\`\`
+```
 
 ### Firebase Hosting
-\`\`\`bash
+```bash
 npm run build
 firebase deploy
-\`\`\`
+```
 
 ## 📁 プロジェクト構造
 
-\`\`\`
+```
 src/
 ├── app/                    # Next.js App Router
 │   ├── dashboard/         # メインダッシュボード
@@ -125,7 +125,7 @@ src/
 │   └── firebase.ts       # Firebase設定
 └── scripts/              # 管理スクリプト
     └── migrate-attendance-data.ts
-\`\`\`
+```
 
 ## 🔒 セキュリティ
 

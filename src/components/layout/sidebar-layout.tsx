@@ -50,7 +50,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
             <Menu className="h-6 w-6" />
           </button>
           <div className="flex-1 px-6 flex justify-between items-center">
-            <h1 className="text-xl font-semibold text-gray-900">IT勤怠管理システム</h1>
+            <h1 className="text-xl font-semibold text-gray-900">STEM研究部勤怠管理システム</h1>
           </div>
         </div>
 

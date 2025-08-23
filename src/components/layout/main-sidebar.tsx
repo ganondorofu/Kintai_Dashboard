@@ -149,8 +149,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
     <div className="flex flex-col h-full bg-white">
       {/* ヘッダー */}
       <div className="flex items-center flex-shrink-0 px-4 py-4 border-b">
-        <UserIcon className="h-6 w-6 text-blue-600 mr-2" />
-        <h1 className="text-lg font-bold text-gray-900">勤怠管理システム</h1>
+        {/* このタイトルはトップバーに集約するため、ここではアイコンのみにしても良い */}
       </div>
 
       {/* ナビゲーション */}
