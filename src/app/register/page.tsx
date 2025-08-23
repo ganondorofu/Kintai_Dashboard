@@ -8,6 +8,8 @@ import RegisterForm from '@/components/register-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Github } from 'lucide-react';
+import { updateLinkRequestStatus } from '@/lib/data-adapter';
+
 
 function RegisterContent() {
   const router = useRouter();
@@ -18,20 +20,37 @@ function RegisterContent() {
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   useEffect(() => {
-    if(!loading && user && appUser) {
-        // Already fully logged in and registered, but on register page?
-        // Let's show a success message or redirect. For now, we assume
-        // the user is here to link a new card if they are already registered.
-        // The RegisterForm will handle this logic.
+    if (token) {
+      updateLinkRequestStatus(token, 'opened');
     }
-  },[user, appUser, loading, router])
+  }, [token]);
 
   const handleSignIn = async () => {
     setIsSigningIn(true);
-    await signInWithGitHub();
-    setIsSigningIn(false);
+    try {
+      await signInWithGitHub();
+    } catch(error) {
+      console.error("Sign in failed", error);
+    } finally {
+      setIsSigningIn(false);
+    }
   }
 
+  // URLパラメータがない場合はエラー表示
+  if (!token || !cardId) {
+    return (
+     <Card className="w-full max-w-md text-center">
+       <CardHeader>
+         <CardTitle>無効なリンク</CardTitle>
+         <CardDescription>
+          この登録リンクは無効です。キオスク端末でQRコードを再スキャンしてください。
+         </CardDescription>
+       </CardHeader>
+     </Card>
+   );
+ }
+
+  // 認証状態が確定するまでローディング表示を維持
   if (loading || isSigningIn) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
@@ -41,26 +60,12 @@ function RegisterContent() {
     );
   }
 
-  // User is authenticated with Firebase, and has GitHub info, show registration form
-  if (user && githubUser && token && cardId) {
+  // 認証済みの場合、登録フォームを表示
+  if (user && githubUser) {
     return <RegisterForm token={token} cardId={cardId} />;
   }
   
-  // URL is missing parameters
-  if (!token || !cardId) {
-     return (
-      <Card className="w-full max-w-md text-center">
-        <CardHeader>
-          <CardTitle>無効なリンク</CardTitle>
-          <CardDescription>
-           この登録リンクは無効です。キオスク端末でQRコードを再スキャンしてください。
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
-  // Not authenticated, show login button
+  // 未認証の場合、ログインボタンを表示
   return (
     <Card className="w-full max-w-md text-center">
       <CardHeader>
@@ -68,8 +73,8 @@ function RegisterContent() {
         <CardDescription>続けるには、GitHubアカウントでログインしてください。</CardDescription>
       </CardHeader>
       <CardContent>
-        <Button onClick={handleSignIn} size="lg" className="w-full">
-          <Github className="mr-2 h-5 w-5" />
+        <Button onClick={handleSignIn} size="lg" className="w-full" disabled={isSigningIn}>
+          {isSigningIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Github className="mr-2 h-5 w-5" />}
           GitHubでログイン
         </Button>
       </CardContent>
