@@ -19,6 +19,7 @@ function RegisterContent() {
   const cardId = searchParams.get('cardId');
   const { user, githubUser, loading, signInWithGitHub, signOut } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isRegistrationComplete, setIsRegistrationComplete] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -64,9 +65,20 @@ function RegisterContent() {
    );
  }
 
+ if (isRegistrationComplete) {
+    return (
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl text-primary">登録完了！</CardTitle>
+          <CardDescription>
+            このウィンドウを閉じてください。カードを使って勤怠を記録できます。
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
   if (user && githubUser) {
-    // 登録済みかどうかをチェックするロジックはRegisterFormに任せる
-    // ここでは、ログインしているアカウント情報を表示し、アカウント切り替えの選択肢を与える
     return (
        <Card className="w-full max-w-md">
          <CardHeader>
@@ -86,7 +98,11 @@ function RegisterContent() {
                     <p className="text-sm text-muted-foreground">{githubUser.email}</p>
                 </div>
             </div>
-            <RegisterForm token={token} cardId={cardId} />
+            <RegisterForm 
+              token={token} 
+              cardId={cardId} 
+              onRegistrationSuccess={() => setIsRegistrationComplete(true)}
+            />
          </CardContent>
          <CardFooter className="flex-col gap-2">
             <Button variant="outline" className="w-full" onClick={handleSwitchAccount}>
