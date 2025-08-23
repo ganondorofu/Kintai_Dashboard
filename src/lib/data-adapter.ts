@@ -396,7 +396,7 @@ export const getUserAttendanceLogsV2 = async (
 
     for (let d = new Date(effectiveEndDate); d >= effectiveStartDate; d.setDate(d.getDate() - 1)) {
         if (logs.length >= limitCount) break;
-
+        
         const { year, month, day } = getAttendancePath(d);
         const dateKey = `${year}-${month}-${day}`;
         const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
@@ -413,9 +413,9 @@ export const getUserAttendanceLogsV2 = async (
         );
         logs.push(...dayLogs);
     }
-
+    
     if (logs.length < limitCount) {
-        const oldLogs = await getUserAttendanceLogs(uid, startDate, endDate, limitCount - logs.length);
+        const oldLogs = await getUserAttendanceLogs(uid, effectiveStartDate, effectiveEndDate, limitCount - logs.length);
         logs.push(...oldLogs);
     }
     
@@ -443,7 +443,7 @@ export const getUserAttendanceLogs = async (
   try {
     const logsRef = collection(db, 'attendance_logs');
     
-    let conditions = [
+    let conditions: any[] = [
         where('uid', '==', uid),
         orderBy('timestamp', 'desc')
     ];
@@ -455,7 +455,11 @@ export const getUserAttendanceLogs = async (
         conditions.push(where('timestamp', '<=', endDate));
     }
 
-    let q = query(logsRef, ...conditions, limit(limitCount));
+    if (limitCount > 0) {
+      conditions.push(limit(limitCount));
+    }
+
+    let q = query(logsRef, ...conditions);
     
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
@@ -1197,245 +1201,6 @@ export const generateAttendanceLogId = (uid: string): string => {
   return `${uid}_${Date.now()}`;
 };
 
-export const getUserAttendanceRecords = async (uid: string, days: number = 30): Promise<any[]> => {
-  try {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - days);
-
-    const attendanceLogsRef = collection(db, 'attendance_logs');
-    const q = query(
-      attendanceLogsRef,
-      where('uid', '==', uid),
-      orderBy('timestamp', 'desc')
-    );
-    
-    const snapshot = await getDocs(q);
-    const logs = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    const attendanceByDate: { [date: string]: { checkIn?: Date, checkOut?: Date } } = {};
-    
-    logs.forEach((log: any) => {
-      const timestamp = safeTimestampToDate(log.timestamp);
-      if (timestamp && timestamp >= startDate) {
-        const dateStr = timestamp.toISOString().split('T')[0];
-        
-        if (!attendanceByDate[dateStr]) {
-          attendanceByDate[dateStr] = {};
-        }
-        
-        if (log.type === 'entry') {
-          attendanceByDate[dateStr].checkIn = timestamp;
-        } else if (log.type === 'exit') {
-          attendanceByDate[dateStr].checkOut = timestamp;
-        }
-      }
-    });
-
-    const attendanceRecords = Object.entries(attendanceByDate).map(([date, record]) => ({
-      date,
-      checkInTime: record.checkIn?.toISOString(),
-      checkOutTime: record.checkOut?.toISOString()
-    }));
-
-    return attendanceRecords.sort((a, b) => b.date.localeCompare(a.date));
-  } catch (error) {
-    console.error('出席記録取得エラー:', error);
-    if (error instanceof Error && error.message.includes('index')) {
-      console.warn('インデックス未作成のため、出席記録を取得できません。Firebaseコンソールでインデックスを作成してください。');
-    }
-    return [];
-  }
-};
-
-export const getTodayAttendanceStats = async (): Promise<any> => {
-  try {
-    const currentDate = new Date();
-    const jstNow = new Date(currentDate.getTime() + (9 * 60 * 60 * 1000));
-    const today = jstNow.toISOString().split('T')[0];
-    const todayStart = new Date(today);
-    const todayEnd = new Date(today);
-    todayEnd.setDate(todayEnd.getDate() + 1);
-    
-    const allUsers = await getAllUsers();
-    
-    if (allUsers.length === 0) {
-      return {
-        date: today,
-        totalUsers: 0,
-        presentUsers: 0,
-        statsByGrade: {}
-      };
-    }
-    
-    const logsRef = collection(db, 'attendance_logs');
-    const logsSnapshot = await getDocs(logsRef);
-    
-    const todayAttendees = new Set<string>();
-    
-    logsSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      const timestamp = safeTimestampToDate(data.timestamp);
-      
-      if (timestamp && timestamp >= todayStart && timestamp < todayEnd) {
-        if (data.type === 'entry') {
-          todayAttendees.add(data.uid);
-        }
-      }
-    });
-    
-    const statsByGrade: { [grade: number]: { total: number, present: number, users: AppUser[] } } = {};
-    
-    allUsers.forEach(user => {
-      const grade = user.grade;
-      if (!statsByGrade[grade]) {
-        statsByGrade[grade] = { total: 0, present: 0, users: [] };
-      }
-      
-      statsByGrade[grade].total++;
-      statsByGrade[grade].users.push(user);
-      
-      if (todayAttendees.has(user.uid)) {
-        statsByGrade[grade].present++;
-      }
-    });
-    
-    return {
-      date: today,
-      totalUsers: allUsers.length,
-      presentUsers: todayAttendees.size,
-      statsByGrade
-    };
-  } catch (error) {
-    console.error('今日の出席統計取得エラー:', error);
-    return {
-      date: new Date().toISOString().split('T')[0],
-      totalUsers: 0,
-      presentUsers: 0,
-      statsByGrade: {}
-    };
-  }
-};
-
-export const createLinkRequest = async (token: string): Promise<string> => {
-  const docRef = await addDoc(collection(db, 'link_requests'), {
-    token,
-    status: 'waiting',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  return docRef.id;
-};
-
-export const updateLinkRequestStatus = async (token: string, status: 'opened' | 'linked' | 'done', data?: Partial<LinkRequest>): Promise<void> => {
-    const q = query(collection(db, 'link_requests'), where('token', '==', token));
-    const snapshot = await getDocs(q);
-
-    if (!snapshot.empty) {
-        const docRef = snapshot.docs[0].ref;
-        await updateDoc(docRef, {
-            status,
-            ...data,
-            updatedAt: serverTimestamp(),
-        });
-    } else {
-        console.warn(`Link request with token ${token} not found.`);
-    }
-};
-
-export const watchTokenStatus = (
-  token: string,
-  callback: (status: string, data?: LinkRequest) => void
-) => {
-  const q = query(collection(db, 'link_requests'), where('token', '==', token), limit(1));
-  
-  return onSnapshot(q, (snapshot) => {
-    if (!snapshot.empty) {
-      const docData = snapshot.docs[0].data() as LinkRequest;
-      callback(docData.status, docData);
-    }
-  });
-};
-
-/**
- * 23:59に全ユーザーを強制的に退勤させる処理
- */
-export const forceClockOutAllUsers = async (): Promise<{ success: number; noAction: number; failed: number }> => {
-  console.log('自動退勤処理を開始します...');
-  const now = new Date();
-  const { year, month, day } = getAttendancePath(now);
-  const dateKey = `${year}-${month}-${day}`;
-
-  let successCount = 0;
-  let noActionCount = 0;
-  let failureCount = 0;
-
-  try {
-    const allUsers = await getAllUsers();
-    const batch = writeBatch(db);
-
-    for (const user of allUsers) {
-      let lastLog: AttendanceLog | null = null;
-      
-      const newLogsRef = collection(db, 'attendances', dateKey, 'logs');
-      const qNew = query(
-        newLogsRef,
-        where('uid', '==', user.uid),
-        orderBy('timestamp', 'desc'),
-        limit(1)
-      );
-      const newLogSnapshot = await getDocs(qNew);
-      
-      if (!newLogSnapshot.empty) {
-        lastLog = newLogSnapshot.docs[0].data() as AttendanceLog;
-      } else {
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        const oldLogsRef = collection(db, 'attendance_logs');
-        const qOld = query(
-          oldLogsRef,
-          where('uid', '==', user.uid),
-          where('timestamp', '>=', startOfDay),
-          where('timestamp', '<', now),
-          orderBy('timestamp', 'desc'),
-          limit(1)
-        );
-        const oldLogSnapshot = await getDocs(qOld);
-        if (!oldLogSnapshot.empty) {
-          lastLog = oldLogSnapshot.docs[0].data() as AttendanceLog;
-        }
-      }
-
-      if (lastLog && lastLog.type === 'entry') {
-        const logId = generateAttendanceLogId(user.uid);
-        const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
-        
-        batch.set(newLogRef, {
-          uid: user.uid,
-          type: 'exit',
-          timestamp: serverTimestamp(),
-          cardId: user.cardId || 'auto_checkout',
-          memo: 'Forced checkout by system'
-        });
-        successCount++;
-        console.log(`退勤記録を追加: ${user.firstname} ${user.lastname}`);
-      } else {
-        noActionCount++;
-      }
-    }
-
-    await batch.commit();
-    console.log(`自動退勤処理完了。成功: ${successCount}, 対象外: ${noActionCount}`);
-    return { success: successCount, noAction: noActionCount, failed: failureCount };
-  } catch (error) {
-    console.error('自動退勤処理中にエラーが発生しました:', error);
-    const userCount = (await getAllUsers()).length;
-    return { success: 0, noAction: userCount - failureCount, failed: failureCount };
-  }
-};
-
 export const getWorkdaysInRange = async (startDate: Date, endDate: Date): Promise<Date[]> => {
     const workdaysRef = collection(db, 'workdays');
     const q = query(
@@ -1519,6 +1284,7 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     return { status: 'error', message: 'エラーが発生しました', subMessage: 'もう一度お試しください' };
   }
 };
+
 
 
 

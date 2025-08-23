@@ -7,20 +7,52 @@ import { ArrowLeft, User, Calendar, Clock, TrendingUp, MapPin } from 'lucide-rea
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { getAllUsers, getUserAttendanceRecords, getWorkdaysInRange } from '@/lib/data-adapter';
+import { getAllUsers, getUserAttendanceLogsV2, getWorkdaysInRange, safeTimestampToDate } from '@/lib/data-adapter';
 import { convertToJapaneseGrade } from '@/lib/utils';
 import type { User as UserType, AttendanceLog } from '@/types';
-import { subDays } from 'date-fns';
+import { subDays, differenceInMinutes } from 'date-fns';
 
 interface MemberStats {
   user: UserType;
   totalWorkdays: number;
   attendedDays: number;
   attendanceRate: number;
-  recentAttendance: AttendanceLog[];
+  recentAttendance: any[]; // Changed to any to match processed data
   averageCheckInTime: string;
   totalWorkHours: number;
 }
+
+const logsToRecords = (logs: AttendanceLog[]): any[] => {
+  const logsByDate: { [date: string]: { checkIn?: Date, checkOut?: Date } } = {};
+
+  logs.forEach(log => {
+    const timestamp = safeTimestampToDate(log.timestamp);
+    if (!timestamp) return;
+
+    const dateStr = timestamp.toISOString().split('T')[0];
+
+    if (!logsByDate[dateStr]) {
+      logsByDate[dateStr] = {};
+    }
+
+    if (log.type === 'entry') {
+      if (!logsByDate[dateStr].checkIn || timestamp < logsByDate[dateStr].checkIn!) {
+        logsByDate[dateStr].checkIn = timestamp;
+      }
+    } else {
+      if (!logsByDate[dateStr].checkOut || timestamp > logsByDate[dateStr].checkOut!) {
+        logsByDate[dateStr].checkOut = timestamp;
+      }
+    }
+  });
+
+  return Object.entries(logsByDate).map(([date, record]) => ({
+    date,
+    checkInTime: record.checkIn?.toISOString(),
+    checkOutTime: record.checkOut?.toISOString(),
+  })).sort((a, b) => b.date.localeCompare(a.date));
+};
+
 
 export default function MemberStatsPage() {
   const params = useParams();
@@ -46,8 +78,9 @@ export default function MemberStatsPage() {
         const workdays = await getWorkdaysInRange(thirtyDaysAgo, new Date());
         const totalWorkdays = workdays.length;
         const workdaysSet = new Set(workdays.map(d => d.toISOString().split('T')[0]));
-
-        const attendanceRecords = await getUserAttendanceRecords(member.uid, 30);
+        
+        const attendanceLogs = await getUserAttendanceLogsV2(member.uid, thirtyDaysAgo, new Date(), 100);
+        const attendanceRecords = logsToRecords(attendanceLogs);
         
         const attendedDays = attendanceRecords.filter(record => record.checkInTime && workdaysSet.has(record.date)).length;
         const attendanceRate = totalWorkdays > 0 ? Math.round((attendedDays / totalWorkdays) * 100) : 0;
@@ -67,9 +100,20 @@ export default function MemberStatsPage() {
           const minutes = Math.round(avgTimeInMs % 60);
           averageCheckInTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
         }
+        
+        // 総労働時間を計算
+        let totalStayMinutes = 0;
+        attendanceRecords.forEach(record => {
+            if (record.checkInTime && record.checkOutTime) {
+                const checkIn = new Date(record.checkInTime);
+                const checkOut = new Date(record.checkOutTime);
+                if (checkOut > checkIn) {
+                    totalStayMinutes += differenceInMinutes(checkOut, checkIn);
+                }
+            }
+        });
+        const totalWorkHours = totalStayMinutes / 60;
 
-        // 総労働時間を計算（8時間/日と仮定）
-        const totalWorkHours = attendedDays * 8;
 
         setMemberStats({
           user: member,
@@ -78,7 +122,7 @@ export default function MemberStatsPage() {
           attendanceRate,
           recentAttendance: attendanceRecords.slice(0, 10), // 最新10件
           averageCheckInTime,
-          totalWorkHours
+          totalWorkHours: parseFloat(totalWorkHours.toFixed(1))
         });
       } catch (error) {
         console.error('Failed to fetch member stats:', error);
@@ -145,7 +189,7 @@ export default function MemberStatsPage() {
               {user.lastname} {user.firstname}
             </h1>
             <p className="text-gray-600">
-              {convertToJapaneseGrade(user.grade)} | {user.email}
+              {convertToJapaneseGrade(user.grade)} | {user.github}
             </p>
           </div>
         </div>
