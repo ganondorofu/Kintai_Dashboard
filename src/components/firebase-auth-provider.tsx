@@ -1,7 +1,7 @@
 
 "use client";
 
-import { createContext, useEffect, useState, ReactNode, useCallback } from "react";
+import React, { createContext, useEffect, useState, ReactNode, useCallback } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 import { onAuthStateChanged, GithubAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
@@ -21,7 +21,7 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [githubUser, setGithubUser] = useState<GitHubUser | null>(null);
