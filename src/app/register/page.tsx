@@ -7,9 +7,10 @@ import { useAuth } from '@/hooks/use-auth';
 import RegisterForm from '@/components/register-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, Github, LogOut, User } from 'lucide-react';
+import { Loader2, Github, LogOut, User, CheckCircle } from 'lucide-react';
 import { updateLinkRequestStatus } from '@/lib/data-adapter';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import Link from 'next/link';
 
 
 function RegisterContent() {
@@ -17,7 +18,7 @@ function RegisterContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const cardId = searchParams.get('cardId');
-  const { user, githubUser, loading, signInWithGitHub, signOut } = useAuth();
+  const { user, appUser, githubUser, loading, signInWithGitHub, signOut } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isRegistrationComplete, setIsRegistrationComplete] = useState(false);
 
@@ -52,6 +53,20 @@ function RegisterContent() {
     );
   }
 
+  if (isRegistrationComplete) {
+    return (
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center items-center">
+          <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
+          <CardTitle className="text-2xl text-primary">登録完了！</CardTitle>
+          <CardDescription>
+            このウィンドウを閉じてください。カードを使って勤怠を記録できます。
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
   if (!token || !cardId) {
     return (
      <Card className="w-full max-w-md text-center">
@@ -65,17 +80,28 @@ function RegisterContent() {
    );
  }
 
- if (isRegistrationComplete) {
+  if (user && appUser) {
     return (
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl text-primary">登録完了！</CardTitle>
-          <CardDescription>
-            このウィンドウを閉じてください。カードを使って勤怠を記録できます。
-          </CardDescription>
+        <CardHeader className="text-center items-center">
+            <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
+            <CardTitle>すでに登録済みです</CardTitle>
+            <CardDescription>
+                あなたのアカウントは既に出席システムに登録されています。
+            </CardDescription>
         </CardHeader>
+        <CardContent className="text-center">
+            <p className="text-sm text-muted-foreground">
+                ダッシュボードに移動して勤怠状況を確認してください。
+            </p>
+        </CardContent>
+        <CardFooter>
+            <Link href="/dashboard" className="w-full">
+                <Button className="w-full">ダッシュボードへ移動</Button>
+            </Link>
+        </CardFooter>
       </Card>
-    );
+    )
   }
 
   if (user && githubUser) {
