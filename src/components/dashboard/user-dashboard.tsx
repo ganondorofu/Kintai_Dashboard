@@ -34,11 +34,15 @@ export default function UserDashboard({ user }: UserDashboardProps) {
         {/* Left Column */}
         <div className="lg:col-span-1 space-y-6">
           <UserInfoCard user={user} allTeams={allTeams} />
-          <AttendanceStats user={user} />
+        </div>
+
+        {/* Center Column */}
+        <div className="lg:col-span-1 space-y-6">
+           <AttendanceStats user={user} />
         </div>
 
         {/* Right Column */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-1">
           <AttendanceLogs user={user} />
         </div>
       </div>

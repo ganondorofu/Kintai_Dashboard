@@ -92,7 +92,7 @@ export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user }) => {
 
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>月間出退勤履歴</CardTitle>
         <div className="flex items-center gap-2">
