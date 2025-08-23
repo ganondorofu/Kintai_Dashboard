@@ -5,7 +5,7 @@ import { db } from './firebase';
 import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
 import type { GitHubUser } from './oauth';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { zonedTimeToUtc, formatInTimeZone } from 'date-fns-tz';
+import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
 
 const JST_TIMEZONE = 'Asia/Tokyo';
 /**
@@ -58,7 +58,7 @@ export const safeTimestampToDate = (timestamp: any): Date | null => {
 // 新しいデータ構造用のヘルパー関数
 export const getAttendancePath = (date: Date): { year: string, month: string, day: string, fullPath: string } => {
   // JST (UTC+9) で日付を取得
-  const jstDate = zonedTimeToUtc(date, JST_TIMEZONE);
+  const jstDate = toZonedTime(date, JST_TIMEZONE);
   const year = formatInTimeZone(jstDate, JST_TIMEZONE, 'yyyy');
   const month = formatInTimeZone(jstDate, JST_TIMEZONE, 'MM');
   const day = formatInTimeZone(jstDate, JST_TIMEZONE, 'dd');
@@ -998,7 +998,7 @@ export const debugAttendanceLogs = async (): Promise<void> => {
     const snapshot = await getDocs(logsRef);
     
     const currentDate = new Date();
-    const jstNow = new Date(currentDate.getTime() + (9 * 60 * 60 * 1000));
+    const jstNow = toZonedTime(currentDate, JST_TIMEZONE);
     const today = jstNow.toISOString().split('T')[0];
     const todayStart = new Date(today);
     const todayEnd = new Date(today);

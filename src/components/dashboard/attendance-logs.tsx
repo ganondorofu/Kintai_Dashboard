@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatInTimeZone, zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
+import { formatInTimeZone, zonedTimeToUtc, toZonedTime } from 'date-fns-tz';
 import { startOfMonth, endOfMonth, differenceInMinutes, subMonths, addMonths } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { getUserAttendanceLogsV2, safeTimestampToDate } from '@/lib/data-adapter';
@@ -33,7 +33,7 @@ export const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user }) => {
     const fetchLogs = async () => {
       setLoading(true);
       try {
-        const zonedCurrentMonth = utcToZonedTime(currentMonth, JST_TIMEZONE);
+        const zonedCurrentMonth = toZonedTime(currentMonth, JST_TIMEZONE);
         const monthStart = startOfMonth(zonedCurrentMonth);
         const monthEnd = endOfMonth(zonedCurrentMonth);
         
