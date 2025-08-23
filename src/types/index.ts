@@ -1,73 +1,71 @@
 import type { Timestamp } from 'firebase/firestore';
 
 export interface AppUser {
-  uid: string;              // Firebase Auth UID または GitHub ID（文字列）
+  uid: string;              // Firebase Auth UID
   github: string;
-  githubLogin?: string;     // 新しいOAuth実装用
-  githubId?: number;        // 新しいOAuth実装用（GitHub API の数値ID）
-  firebaseUid?: string;     // 既存システムからの移行用（Firebase Auth UID）
-  name?: string;            // 新しいOAuth実装用
-  avatarUrl?: string;       // 新しいOAuth実装用
-  cardId?: string;          // 既存データにはない場合があるためオプショナル
+  githubLogin?: string;
+  githubId?: number;
+  name?: string;
+  avatarUrl?: string;
+  cardId?: string;
   firstname: string;
   lastname: string;
-  teamId?: string;          // 既存データでteamIdがない場合があるためオプショナル
+  teamId?: string;
   grade: number;
-  role?: 'user' | 'admin';  // 既存データにはroleがない場合があるためオプショナル
-  oauthProvider?: 'github'; // OAuth認証プロバイダー情報
-  lastLoginAt?: Timestamp;  // OAuth統合用に追加
-  createdAt?: Timestamp;    // 既存データにはない場合があるためオプショナル
-  updatedAt?: Timestamp;    // 既存データ構造に合わせて追加
-  status?: 'active' | 'inactive'; // 出勤状況
-  last_activity?: Timestamp; // 最終活動時刻
+  role?: 'user' | 'admin';
+  lastLoginAt?: Timestamp;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+  status?: 'active' | 'inactive';
+  last_activity?: Timestamp;
 }
 
 export interface Team {
   id: string;
   name: string;
-  leaderUid?: string;       // 既存データ構造に合わせて追加
-  createdAt?: Timestamp;    // 既存データにはない場合があるためオプショナル
+  leaderUid?: string;
+  createdAt?: Timestamp;
 }
 
 export interface AttendanceLog {
-  id?: string;              // Firestoreドキュメントは自動生成されるためオプショナル
+  id?: string;
   uid: string;
-  cardId?: string;          // 既存データではcardIdがない場合があるためオプショナル
+  cardId?: string;
   type: 'entry' | 'exit';
   timestamp: Timestamp;
 }
 
 export interface LinkRequest {
-  id?: string;              // Firestoreドキュメントは自動生成されるためオプショナル
+  id?: string;
   token: string;
-  cardId?: string;          // 既存データ構造では待機中はcardIdがない
-  status: 'waiting' | 'linked' | 'done';
-  uid?: string;             // リンク完了時のみ設定
-  github?: string;          // 既存データ構造に合わせて追加
+  cardId?: string;
+  status: 'waiting' | 'opened' | 'linked' | 'done';
+  uid?: string;
+  github?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
 // 既存システムにある追加コレクション
 export interface Workday {
-  id?: string;              // ドキュメントIDは日付（YYYY-MM-DD）
-  date: string;             // YYYY-MM-DD形式
+  id?: string;
+  date: string;
   createdAt: Timestamp;
 }
 
 export interface Summary {
-  id?: string;              // ドキュメントIDは workdays_{YYYY_MM} 形式
-  totalDays: number;        // 月間の総労働日数
+  id?: string;
+  totalDays: number;
   updatedAt: Timestamp;
 }
 
 // 月次出席統計キャッシュ
 export interface MonthlyAttendanceCache {
-  id?: string;              // ドキュメントIDは attendance_stats_{YYYY_MM} 形式
+  id?: string;
   year: number;
-  month: number;            // 0-11 (JavaScript形式)
+  month: number;
   dailyStats: Record<string, {
-    date: string;           // YYYY-MM-DD形式
+    date: string;
     totalCount: number;
     teamStats: {
       teamId: string;
@@ -75,11 +73,11 @@ export interface MonthlyAttendanceCache {
       gradeStats: {
         grade: number;
         count: number;
-        userIds: string[];  // ユーザー詳細は別途取得
+        userIds: string[];
       }[];
     }[];
   }>;
   lastCalculated: Timestamp;
-  lastLogCount: number;     // 計算時点での出勤ログ総数（変更検知用）
-  dataHash: string;         // データ変更検知用ハッシュ
+  lastLogCount: number;
+  dataHash: string;
 }

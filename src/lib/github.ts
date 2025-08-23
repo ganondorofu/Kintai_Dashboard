@@ -1,3 +1,12 @@
+
+export interface GitHubUser {
+  id: number;
+  login: string;
+  name: string;
+  email: string;
+  avatar_url: string;
+}
+
 export async function isMemberOfOrg(accessToken: string, orgs: string[]): Promise<boolean> {
   if (!accessToken) {
     console.error("GitHub access token is missing.");
@@ -31,14 +40,8 @@ export async function isMemberOfOrg(accessToken: string, orgs: string[]): Promis
       return false;
     }
     
-    // Check if the user is a member of ANY of the provided orgs
     const userOrgLogins = userOrgs.map((o: { login: string }) => o.login.toLowerCase());
     
-    // --- DEBUG LOG ---
-    console.log("Required Orgs:", validOrgs.map(o => o.toLowerCase()));
-    console.log("User's Orgs:", userOrgLogins);
-    // --- END DEBUG LOG ---
-
     return validOrgs.some(requiredOrg => userOrgLogins.includes(requiredOrg.toLowerCase()));
 
   } catch (error) {
