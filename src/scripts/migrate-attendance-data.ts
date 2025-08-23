@@ -6,7 +6,7 @@
  * 新規: /attendances/{年月日}/logs/{logId}
  * 
  * 使用方法:
- * 1. Firebase Admin SDKの設定
+ * 1. Firebase Admin SDKの設定（後述）
  * 2. npm run migrate:attendance で実行
  */
 
@@ -14,27 +14,40 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { AttendanceLog } from '@/types';
 import path from 'path';
+import dotenv from 'dotenv';
+
+// .envファイルを読み込む
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
 
 // Firebase Admin SDK の初期化
 if (!getApps().length) {
   const serviceAccountPath = path.join(process.cwd(), 'firebase-service-account-key.json');
   
   try {
-    // サービスアカウントキーファイルを使用
+    // 方法1: サービスアカウントキーファイルを使用
+    const serviceAccount = require(serviceAccountPath);
     initializeApp({
-      credential: cert(serviceAccountPath),
+      credential: cert(serviceAccount),
     });
-    console.log('Firebase Admin SDK initialized with service account key file');
+    console.log('Firebase Admin SDK initialized with service account key file.');
   } catch (error) {
-    // ファイルが見つからない場合は環境変数を使用
-    console.log('Service account key file not found, using environment variables');
-    initializeApp({
-      credential: cert({
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_DATA_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
-    });
+    // 方法2: ファイルが見つからない場合は環境変数を使用
+    console.log('Service account key file not found, trying environment variables...');
+    if (process.env.NEXT_PUBLIC_FIREBASE_DATA_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+      initializeApp({
+        credential: cert({
+          projectId: process.env.NEXT_PUBLIC_FIREBASE_DATA_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        }),
+      });
+      console.log('Firebase Admin SDK initialized with environment variables.');
+    } else {
+      console.error('Firebase Admin SDK initialization failed. Either firebase-service-account-key.json or required environment variables are missing.');
+      process.exit(1);
+    }
   }
 }
 
@@ -43,16 +56,32 @@ const db = getFirestore();
 // 安全なタイムスタンプ変換
 const safeTimestampToDate = (timestamp: any): Date | null => {
   try {
+    if (!timestamp) return null;
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    if (timestamp instanceof Timestamp) {
+      return timestamp.toDate();
+    }
+    // Firestore's admin SDK might return a different Timestamp object
     if (timestamp && typeof timestamp.toDate === 'function') {
       return timestamp.toDate();
-    } else if (timestamp instanceof Date) {
-      return timestamp;
-    } else if (timestamp && timestamp._seconds !== undefined) {
+    }
+    if (timestamp && typeof timestamp === 'string') {
+      const parsed = new Date(timestamp);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+    if (timestamp && typeof timestamp === 'number') {
+      const parsed = new Date(timestamp);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+    if (timestamp && timestamp._seconds !== undefined && timestamp._nanoseconds !== undefined) {
       return new Date(timestamp._seconds * 1000 + (timestamp._nanoseconds || 0) / 1000000);
     }
+    console.warn('無効なタイムスタンプ形式:', timestamp);
     return null;
   } catch (error) {
-    console.error('タイムスタンプ変換エラー:', error);
+    console.error('タイムスタンプ変換エラー:', error, timestamp);
     return null;
   }
 };
