@@ -8,54 +8,32 @@ import { getTeamMembers, getAllUsers, getAllTeams, updateUser, formatKisei, crea
 import type { AppUser, AttendanceLog, Team } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
+import { useDashboard } from '@/contexts/dashboard-context';
 
 interface TeamManagementProps {
   currentUser: AppUser;
 }
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) => {
-  const [users, setUsers] = useState<AppUser[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
+  const { allUsers, allTeams, refreshData, isLoading: isDashboardLoading } = useDashboard();
   const [selectedTeam, setSelectedTeam] = useState<string>('');
-  const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const { toast } = useToast();
 
   const isAdmin = currentUser.role === 'admin';
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [fetchedTeams, fetchedUsers] = await Promise.all([
-        getAllTeams(),
-        getAllUsers() // N+1問題を解決した関数を常に使用
-      ]);
-      
-      setTeams(fetchedTeams);
-      setUsers(fetchedUsers);
-      
-      if (!isAdmin && currentUser.teamId) {
-        setSelectedTeam(currentUser.teamId);
-      }
-    } catch (error) {
-      console.error('データ取得エラー:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
   useEffect(() => {
-    fetchData();
+    if (!isAdmin && currentUser.teamId) {
+      setSelectedTeam(currentUser.teamId);
+    }
   }, [currentUser, isAdmin]);
 
 
   const handleUserUpdate = async (uid: string, updates: Partial<AppUser>) => {
     try {
       await updateUser(uid, updates);
-      setUsers(prev => prev.map(user => 
-        user.uid === uid ? { ...user, ...updates } : user
-      ));
+      await refreshData(); // データを再取得して全体の状態を更新
       setEditingUser(null);
       toast({ title: '成功', description: 'ユーザー情報が更新されました。' });
     } catch (error) {
@@ -73,7 +51,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
         description: `${user.lastname} ${user.firstname}さんを${type === 'entry' ? '出勤' : '退勤'}させました。`,
       });
       // Refresh data to show updated status
-      await fetchData();
+      await refreshData();
     } catch (error) {
       console.error('手動勤怠記録エラー:', error);
       toast({ title: 'エラー', description: '手動での勤怠記録に失敗しました。', variant: 'destructive' });
@@ -83,15 +61,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
   };
 
   const getTeamName = (teamId: string) => {
-    const team = teams.find(t => t.id === teamId);
+    const team = allTeams.find(t => t.id === teamId);
     return team?.name || `班${teamId}`;
   };
 
   const filteredUsers = selectedTeam 
-    ? users.filter(user => user.teamId === selectedTeam)
-    : users;
+    ? allUsers.filter(user => user.teamId === selectedTeam)
+    : allUsers;
 
-  if (loading) {
+  if (isDashboardLoading) {
     return (
       <div className="flex justify-center p-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
@@ -113,7 +91,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
             className="border rounded-md px-3 py-2"
           >
             <option value="">全ての班</option>
-            {teams.map(team => (
+            {allTeams.map(team => (
               <option key={team.id} value={team.id}>{team.name}</option>
             ))}
           </select>
@@ -216,7 +194,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                 >
                   <option value="">未配属</option>
-                  {teams.map(team => (
+                  {allTeams.map(team => (
                     <option key={team.id} value={team.id}>{team.name}</option>
                   ))}
                 </select>

@@ -1,70 +1,19 @@
-
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 認証済みユーザーのみアクセスを許可
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    // ドキュメントの所有者か確認
-    function isOwner(uid) {
-      return request.auth.uid == uid;
-    }
-
-    // 管理者か確認
-    function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
-    // ユーザー情報
-    match /users/{userId} {
-      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
-      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
-      allow create: if isAuthenticated();
-    }
-
-    // チーム情報
-    match /teams/{teamId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin(); // 管理者のみ書き込み可能
-    }
-
-    // 新しい階層型勤怠ログ
-    match /attendances/{date}/logs/{logId} {
-      allow read: if isAuthenticated() && (isOwner(get(resource.path).data.uid) || isAdmin());
-      allow create: if isAuthenticated();
-      // 更新と削除は原則許可しない
-      allow update, delete: if false; 
-    }
-    
-    // 従来の勤怠ログ（読み取り専用、移行措置）
-    match /attendance_logs/{logId} {
-      allow read: if isAuthenticated();
-      allow write: if false; // 新規書き込みは禁止
-    }
-
-    // カード連携リクエスト
-    match /link_requests/{requestId} {
-      allow read: if true; // QRコード読み取りのため誰でも読み取り可
-      allow create: if true; // 誰でも作成可能
-      allow update: if isAuthenticated() && (isOwner(resource.data.uid) || isAdmin());
-    }
-
-    // 月次サマリーと労働日
-    match /summary/{summaryId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin(); // 管理者権限を持つバックエンドからのみ
-    }
-    match /workdays/{workdayId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin(); // 管理者権限を持つバックエンドからのみ
-    }
-
-    // 月次キャッシュ
-    match /monthly_attendance_cache/{cacheId} {
-        allow read, write: if isAdmin(); // 管理者のみ
+    // This rule allows anyone with your Firestore database reference to view, edit,
+    // and delete all data in your Firestore database. It is useful for getting
+    // started, but it is configured to expire after 30 days because it
+    // leaves your app open to attackers. At that time, all client
+    // requests to your Firestore database will be denied.
+    //
+    // Make sure to write security rules for your app before that time, or else
+    // all client requests to your Firestore database will be denied until you Update
+    // your rules
+    match /{document=**} {
+      allow read, write: if request.time < timestamp.date(2025, 9, 16);
     }
   }
 }
