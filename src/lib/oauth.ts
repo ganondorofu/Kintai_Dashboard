@@ -21,10 +21,14 @@ export interface OAuthTokens {
 }
 
 const GITHUB_CLIENT_ID = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID!;
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 
 // GitHub OAuth認証URLを生成
 export const getGitHubAuthUrl = (): string => {
-  const redirectUri = `${window.location.origin}/auth/callback`;
+  if (!APP_URL) {
+    throw new Error("NEXT_PUBLIC_APP_URL is not set. Please add it to your .env file.");
+  }
+  const redirectUri = `${APP_URL}/auth/callback`;
   const params = new URLSearchParams({
     client_id: GITHUB_CLIENT_ID,
     redirect_uri: redirectUri,
