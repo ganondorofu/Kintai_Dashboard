@@ -7,21 +7,11 @@ import { TeamManagement } from './team-management';
 import { AttendanceCalendar } from './attendance-calendar';
 import { collection, query, where, getDocs, writeBatch, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { generateAttendanceLogId } from '@/lib/data-adapter';
+import { generateAttendanceLogId, getAttendancePath } from '@/lib/data-adapter';
 import type { AppUser } from '@/types';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-
-// getAttendancePathを直接定義
-const getAttendancePath = (date: Date): { year: string, month: string, day: string } => {
-  const jstDate = new Date(date.getTime());
-  const year = jstDate.getFullYear().toString();
-  const month = (jstDate.getMonth() + 1).toString().padStart(2, '0');
-  const day = jstDate.getDate().toString().padStart(2, '0');
-  
-  return { year, month, day };
-};
 
 
 export default function AdminDashboard() {
@@ -51,7 +41,6 @@ export default function AdminDashboard() {
         const dateKey = `${year}-${month}-${day}`;
 
         snapshot.forEach(userDoc => {
-            const userData = userDoc.data() as AppUser;
             const userId = userDoc.id;
 
             const logId = generateAttendanceLogId(userId);

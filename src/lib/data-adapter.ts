@@ -54,7 +54,7 @@ export const safeTimestampToDate = (timestamp: any): Date | null => {
 };
 
 // 新しいデータ構造用のヘルパー関数
-const getAttendancePath = (date: Date): { year: string, month: string, day: string, fullPath: string } => {
+export const getAttendancePath = (date: Date): { year: string, month: string, day: string, fullPath: string } => {
   // JST (UTC+9) で日付を取得
   const jstDate = new Date(date.getTime());
   const year = jstDate.getFullYear().toString();
@@ -123,37 +123,33 @@ export const getAllUsers = async (): Promise<AppUser[]> => {
       ...doc.data()
     } as AppUser));
 
-    // 各ユーザーの最新の勤怠ステータスを取得
-    const userStatusPromises = users.map(async (user) => {
-      const { year, month, day } = getAttendancePath(new Date());
-      const dateKey = `${year}-${month}-${day}`;
-      
-      const q = query(
-        collection(db, 'attendances', dateKey, 'logs'),
-        where('uid', '==', user.uid),
-        orderBy('timestamp', 'desc'),
-        limit(1)
-      );
-      const logSnapshot = await getDocs(q);
+    // 今日の日付の最新ログを一度に取得
+    const { year, month, day } = getAttendancePath(new Date());
+    const dateKey = `${year}-${month}-${day}`;
+    const todayLogsRef = collection(db, 'attendances', dateKey, 'logs');
+    const todayLogsSnapshot = await getDocs(todayLogsRef);
+    const todayLogs = todayLogsSnapshot.docs.map(doc => doc.data() as AttendanceLog);
 
-      if (!logSnapshot.empty) {
-        const lastLog = logSnapshot.docs[0].data() as AttendanceLog;
-        return {
-          ...user,
-          status: lastLog.type === 'entry' ? 'active' : 'inactive',
-          last_activity: lastLog.timestamp,
-        };
+    const latestLogs = new Map<string, AttendanceLog>();
+    todayLogs.forEach(log => {
+      const existing = latestLogs.get(log.uid);
+      if (!existing || (safeTimestampToDate(log.timestamp)?.getTime() || 0) > (safeTimestampToDate(existing.timestamp)?.getTime() || 0)) {
+        latestLogs.set(log.uid, log);
       }
-      return { ...user, status: 'inactive' };
     });
 
-    return Promise.all(userStatusPromises);
+    return users.map(user => {
+      const lastLog = latestLogs.get(user.uid);
+      const status = lastLog?.type === 'entry' ? 'active' : 'inactive';
+      return { ...user, status, last_activity: lastLog?.timestamp };
+    });
 
   } catch (error) {
     console.error('全ユーザー取得エラー:', error);
     return [];
   }
 };
+
 
 // チーム一覧を取得（重複を許容しないように修正）
 export const getAllTeams = async (): Promise<Team[]> => {
@@ -187,29 +183,27 @@ const calculateDailyAttendanceFromLogsData = async (
   gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
 }[]> => {
   try {
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const dayEntryLogs = logs.filter(log => {
-      const logDate = safeTimestampToDate(log.timestamp);
-      if (!logDate) return false;
-      
-      return logDate >= startOfDay && 
-             logDate <= endOfDay && 
-             log.type === 'entry';
-    });
-    
-    const attendedUids = [...new Set(dayEntryLogs.map(log => log.uid))];
-    
-    const allUsers = await getAllUsers();
+    const allUsers = await getAllUsers(); // ユーザーのステータス込みで取得
     const teams = await getAllTeams();
     const teamMap = teams.reduce((acc, team) => {
       acc[team.id] = team.name;
       return acc;
     }, {} as Record<string, string>);
+
+    // 今日のログから最新のログを取得して出勤者を特定
+    const latestLogs = new Map<string, AttendanceLog>();
+    logs.forEach(log => {
+      const existing = latestLogs.get(log.uid);
+      if (!existing || (safeTimestampToDate(log.timestamp)?.getTime() || 0) > (safeTimestampToDate(existing.timestamp)?.getTime() || 0)) {
+        latestLogs.set(log.uid, log);
+      }
+    });
+    const attendedUids = new Set<string>();
+    latestLogs.forEach((log, uid) => {
+      if (log.type === 'entry') {
+        attendedUids.add(uid);
+      }
+    });
     
     const teamGroups = allUsers.reduce((acc, user) => {
       const teamId = user.teamId || 'unassigned';
@@ -231,11 +225,11 @@ const calculateDailyAttendanceFromLogsData = async (
       }, {} as Record<number, AppUser[]>);
 
       const gradeStats = Object.entries(gradeGroups).map(([gradeStr, gradeUsers]) => {
-          const gradePresentUsers = gradeUsers.filter(u => attendedUids.includes(u.uid));
+          const gradePresentUsers = gradeUsers.filter(u => attendedUids.has(u.uid));
           return {
             grade: parseInt(gradeStr),
             count: gradePresentUsers.length,
-            users: gradeUsers.map(u => ({ ...u, isPresent: attendedUids.includes(u.uid) }))
+            users: gradeUsers.map(u => ({ ...u, isPresent: attendedUids.has(u.uid) }))
           }
       }).sort((a, b) => b.grade - a.grade);
 
@@ -394,29 +388,31 @@ export const getUserAttendanceLogsV2 = async (
     const effectiveStartDate = startDate || new Date(0);
     const effectiveEndDate = endDate || new Date();
 
-    for (let d = new Date(effectiveEndDate); d >= effectiveStartDate; d.setDate(d.getDate() - 1)) {
-        if (logs.length >= limitCount) break;
-        
-        const { year, month, day } = getAttendancePath(d);
-        const dateKey = `${year}-${month}-${day}`;
-        const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
+    const yearMonths = getYearMonthsInRange(effectiveStartDate, effectiveEndDate);
 
-        const q = query(
-          dayLogsRef,
-          where('uid', '==', uid),
-          orderBy('timestamp', 'desc')
-        );
-        
-        const daySnapshot = await getDocs(q);
-        const dayLogs = daySnapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as AttendanceLog)
-        );
-        logs.push(...dayLogs);
-    }
-    
-    if (logs.length < limitCount) {
-        const oldLogs = await getUserAttendanceLogs(uid, effectiveStartDate, effectiveEndDate, limitCount - logs.length);
-        logs.push(...oldLogs);
+    for (const { year, month } of yearMonths) {
+        const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+        for (let day = 1; day <= daysInMonth; day++) {
+            if (logs.length >= limitCount) break;
+
+            const date = new Date(parseInt(year), parseInt(month) - 1, day);
+            if (date < effectiveStartDate || date > effectiveEndDate) continue;
+
+            const dateKey = `${year}-${month}-${day.toString().padStart(2, '0')}`;
+            const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
+
+            const q = query(
+              dayLogsRef,
+              where('uid', '==', uid),
+              orderBy('timestamp', 'desc')
+            );
+            
+            const daySnapshot = await getDocs(q);
+            const dayLogs = daySnapshot.docs.map(
+              (doc) => ({ id: doc.id, ...doc.data() } as AttendanceLog)
+            );
+            logs.push(...dayLogs);
+        }
     }
     
     return logs
@@ -429,7 +425,7 @@ export const getUserAttendanceLogsV2 = async (
 
   } catch (error) {
     console.error('新しい勤怠ログ取得エラー:', error);
-    return getUserAttendanceLogs(uid, startDate, endDate, limitCount);
+    return [];
   }
 };
 
@@ -482,38 +478,29 @@ export const getAllAttendanceLogs = async (
 
     const effectiveStartDate = startDate || new Date(0);
     const effectiveEndDate = endDate || new Date();
+    
+    const yearMonths = getYearMonthsInRange(effectiveStartDate, effectiveEndDate);
 
-    for (let d = new Date(effectiveEndDate); d >= effectiveStartDate; d.setDate(d.getDate() - 1)) {
+    for (const { year, month } of yearMonths) {
+        const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+        for (let day = 1; day <= daysInMonth; day++) {
+            if (allLogs.length >= limitCount) break;
+            
+            const date = new Date(parseInt(year), parseInt(month) - 1, day);
+            if (date < effectiveStartDate || date > effectiveEndDate) continue;
+            
+            const dateKey = `${year}-${month}-${day.toString().padStart(2, '0')}`;
+            const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
+            const daySnapshot = await getDocs(dayLogsRef);
+            
+            const dayLogs = daySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            } as AttendanceLog));
+            allLogs.push(...dayLogs);
+        }
         if (allLogs.length >= limitCount) break;
-        const { year, month, day } = getAttendancePath(d);
-        const dateKey = `${year}-${month}-${day}`;
-        const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
-        const daySnapshot = await getDocs(dayLogsRef);
-        
-        const dayLogs = daySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        } as AttendanceLog));
-        allLogs.push(...dayLogs);
     }
-    
-    const oldLogsRef = collection(db, 'attendance_logs');
-    let qOld = query(
-      oldLogsRef,
-      orderBy('timestamp', 'desc')
-    );
-
-    if (startDate && endDate) {
-      qOld = query(qOld, where('timestamp', '>=', startDate), where('timestamp', '<=', endDate));
-    }
-    
-    const oldSnapshot = await getDocs(qOld);
-    const oldLogs = oldSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as AttendanceLog));
-
-    allLogs.push(...oldLogs);
     
     return allLogs
       .sort((a, b) => {
@@ -536,78 +523,22 @@ const calculateDailyAttendanceFromLogs = async (
   gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
 }[]> => {
   try {
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
+    const { year, month, day } = getAttendancePath(targetDate);
     
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const logsRef = collection(db, 'attendance_logs');
-    const q = query(
-      logsRef,
-      where('timestamp', '>=', startOfDay),
-      where('timestamp', '<=', endOfDay)
-    );
+    const dateKey = `${year}-${month}-${day}`;
+    const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
+    const snapshot = await getDocs(dayLogsRef);
     
-    const snapshot = await getDocs(q);
-    const dayLogs = snapshot.docs.map(doc => doc.data() as AttendanceLog);
+    if (snapshot.empty) {
+        return [];
+    }
     
-    const userLatestLog = new Map<string, AttendanceLog>();
-    dayLogs.forEach(log => {
-      const existing = userLatestLog.get(log.uid);
-      if (!existing || (safeTimestampToDate(log.timestamp)?.getTime() || 0) > (safeTimestampToDate(existing.timestamp)?.getTime() || 0)) {
-        userLatestLog.set(log.uid, log);
-      }
-    });
-
-    const attendedUids = new Set<string>();
-    userLatestLog.forEach((log, uid) => {
-      if (log.type === 'entry') {
-        attendedUids.add(uid);
-      }
-    });
+    const logs: AttendanceLog[] = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as AttendanceLog));
     
-    const allUsers = await getAllUsers();
-    const teams = await getAllTeams();
-    const teamMap = teams.reduce((acc, team) => {
-      acc[team.id] = team.name;
-      return acc;
-    }, {} as Record<string, string>);
-    
-    const teamGroups = allUsers.reduce((acc, user) => {
-      const teamId = user.teamId || 'unassigned';
-      if (!acc[teamId]) {
-        acc[teamId] = [];
-      }
-      acc[teamId].push(user);
-      return acc;
-    }, {} as Record<string, AppUser[]>);
-
-    return Object.entries(teamGroups).map(([teamId, users]) => {
-      const gradeGroups = users.reduce((acc, user) => {
-        const kiseiNumber = user.grade || 10;
-        if (!acc[kiseiNumber]) {
-          acc[kiseiNumber] = [];
-        }
-        acc[kiseiNumber].push(user);
-        return acc;
-      }, {} as Record<number, AppUser[]>);
-
-      const gradeStats = Object.entries(gradeGroups).map(([gradeStr, gradeUsers]) => {
-        const gradePresentUsers = gradeUsers.filter(u => attendedUids.has(u.uid));
-        return {
-          grade: parseInt(gradeStr),
-          count: gradePresentUsers.length,
-          users: gradeUsers.map(u => ({ ...u, isPresent: attendedUids.has(u.uid) }))
-        };
-      }).sort((a, b) => b.grade - a.grade); 
-
-      return {
-        teamId,
-        teamName: teamMap[teamId],
-        gradeStats
-      };
-    });
+    return await calculateDailyAttendanceFromLogsData(logs, targetDate);
 
   } catch (error) {
     console.error('ログデータからの統計計算エラー:', error);
@@ -624,16 +555,7 @@ export const calculateMonthlyAttendanceStats = async (
     const monthStart = new Date(year, month, 1);
     const monthEnd = new Date(year, month + 1, 0); 
     
-    const allLogs = await getAllAttendanceLogs();
-    
-    const monthLogs = allLogs.filter(log => {
-      const logDate = safeTimestampToDate(log.timestamp);
-      if (!logDate) return false;
-      
-      return logDate >= monthStart && 
-             logDate <= monthEnd && 
-             log.type === 'entry';
-    });
+    const allLogs = await getAllAttendanceLogs(monthStart, monthEnd);
     
     const allUsers = await getAllUsers();
     const allTeams = await getAllTeams();
@@ -654,7 +576,7 @@ export const calculateMonthlyAttendanceStats = async (
       const endOfDay = new Date(targetDate);
       endOfDay.setHours(23, 59, 59, 999);
       
-      const dayLogs = monthLogs.filter(log => {
+      const dayLogs = allLogs.filter(log => {
         const logDate = safeTimestampToDate(log.timestamp);
         if (!logDate) return false;
         
@@ -879,28 +801,12 @@ export const calculateMonthlyAttendanceStatsWithCacheV2 = async (
   month: number
 ): Promise<Record<string, { totalCount: number; teamStats: any[] }>> => {
   try {
-    const yearStr = year.toString();
-    const monthStr = (month + 1).toString().padStart(2, '0');
-    
-    let allLogs: AttendanceLog[] = [];
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dayStr = day.toString().padStart(2, '0');
-      const dateKey = `${yearStr}-${monthStr}-${dayStr}`;
-      const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
-      const daySnapshot = await getDocs(dayLogsRef);
-      
-      const dayLogs = daySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as AttendanceLog));
-      
-      allLogs.push(...dayLogs);
-    }
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0); 
+    const allLogs = await getAllAttendanceLogs(startDate, endDate);
     
     if (allLogs.length === 0) {
-      return await calculateMonthlyAttendanceStatsWithCache(year, month);
+      return {};
     }
     
     const allUsers = await getAllUsers();
@@ -922,8 +828,6 @@ export const calculateMonthlyAttendanceStatsWithCacheV2 = async (
       return result;
     }
     
-    const startDate = new Date(year, month, 1);
-    const endDate = new Date(year, month + 1, 0);
     const result: Record<string, { totalCount: number; teamStats: any[] }> = {};
     
     for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
@@ -970,7 +874,7 @@ export const calculateMonthlyAttendanceStatsWithCacheV2 = async (
     return result;
   } catch (error) {
     console.error('新しい月次統計計算エラー:', error);
-    return await calculateMonthlyAttendanceStatsWithCache(year, month);
+    return {};
   }
 };
 
@@ -1282,5 +1186,36 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
   } catch (err) {
     console.error("勤怠記録エラー:", err);
     return { status: 'error', message: 'エラーが発生しました', subMessage: 'もう一度お試しください' };
+  }
+};
+
+export const getTodayAttendanceStats = async (): Promise<{
+  presentUsers: number;
+  totalUsers: number;
+  statsByGrade: Record<string, { present: number; total: number }>;
+}> => {
+  try {
+    const allUsers = await getAllUsers();
+    const totalUsers = allUsers.length;
+
+    const activeUsers = allUsers.filter(u => u.status === 'active');
+    const presentUsers = activeUsers.length;
+
+    const statsByGrade = allUsers.reduce((acc, user) => {
+      const grade = user.grade || 0;
+      if (!acc[grade]) {
+        acc[grade] = { present: 0, total: 0 };
+      }
+      acc[grade].total++;
+      if (user.status === 'active') {
+        acc[grade].present++;
+      }
+      return acc;
+    }, {} as Record<string, { present: number; total: number }>);
+
+    return { presentUsers, totalUsers, statsByGrade };
+  } catch (error) {
+    console.error('今日の出席統計取得エラー:', error);
+    return { presentUsers: 0, totalUsers: 0, statsByGrade: {} };
   }
 };
