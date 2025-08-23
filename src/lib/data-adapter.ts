@@ -398,6 +398,7 @@ export const getUserAttendanceLogsV2 = async (
 
     for (const { year, month } of yearMonths.reverse()) {
       const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+      
       const startDay =
         effectiveEndDate.getFullYear().toString() === year &&
         (effectiveEndDate.getMonth() + 1).toString().padStart(2, '0') === month
@@ -1362,7 +1363,7 @@ export const createLinkRequest = async (token: string): Promise<string> => {
   return docRef.id;
 };
 
-export const updateLinkRequestStatus = async (token: string, status: 'opened' | 'linked', data?: Partial<LinkRequest>): Promise<void> => {
+export const updateLinkRequestStatus = async (token: string, status: 'opened' | 'linked' | 'done', data?: Partial<LinkRequest>): Promise<void> => {
     const q = query(collection(db, 'link_requests'), where('token', '==', token));
     const snapshot = await getDocs(q);
 
@@ -1551,4 +1552,5 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     return { status: 'error', message: 'エラーが発生しました', subMessage: 'もう一度お試しください' };
   }
 };
+
 
