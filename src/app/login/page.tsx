@@ -16,21 +16,17 @@ export default function LoginPage() {
   // Handle redirects after login
   useEffect(() => {
     if (!loading && user) {
-      if (appUser) {
-        // User is logged in and has an app profile, go to dashboard
+        // appUser might still be loading, but we can redirect to dashboard
+        // The dashboard will handle if appUser is null (needs registration)
         router.push('/dashboard');
-      } else {
-        // User is logged in but has no app profile, go to register
-        // This might happen on first login
-        router.push('/register');
-      }
     }
   }, [user, appUser, loading, router]);
 
 
-  const handleGitHubLogin = () => {
+  const handleGitHubLogin = async () => {
     setIsSigningIn(true);
-    signInWithGitHub();
+    await signInWithGitHub();
+    setIsSigningIn(false);
   };
 
   if (loading || user) {

@@ -2,11 +2,11 @@
 
 import { createContext, useEffect, useState, ReactNode, useCallback } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
-import { onAuthStateChanged, GithubAuthProvider, signInWithRedirect, getRedirectResult } from "firebase/auth";
+import { onAuthStateChanged, GithubAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { useToast } from '@/hooks/use-toast';
 import type { AppUser } from "@/types";
-import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import type { GitHubUser } from "@/lib/github-types";
 
 interface AuthContextType {
@@ -14,7 +14,7 @@ interface AuthContextType {
   appUser: AppUser | null;
   githubUser: GitHubUser | null;
   loading: boolean;
-  signInWithGitHub: () => void;
+  signInWithGitHub: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -27,31 +27,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const signInWithGitHub = useCallback(() => {
+  const signInWithGitHub = useCallback(async () => {
     const provider = new GithubAuthProvider();
-    signInWithRedirect(auth, provider).catch(error => {
-      console.error("Sign in with redirect error", error);
+    try {
+      await signInWithPopup(auth, provider);
+      // onAuthStateChanged will handle the user state update.
+    } catch (error: any) {
+      console.error("Sign in with popup error", error);
       toast({ title: 'Login Error', description: error.message, variant: 'destructive' });
-    });
+    }
   }, [toast]);
 
   const signOut = useCallback(async () => {
     await auth.signOut();
+    // Resetting state is handled by onAuthStateChanged
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result) {
-          toast({ title: 'Logged In', description: 'Successfully authenticated with GitHub.' });
-        }
-      })
-      .catch((error) => {
-        console.error("Get redirect result error:", error);
-        toast({ title: "Authentication Error", description: error.message, variant: "destructive" });
-      });
-
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (!currentUser) {
@@ -62,7 +54,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => unsubscribe();
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -83,7 +75,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (docSnap.exists()) {
           setAppUser({ uid: docSnap.id, ...docSnap.data() } as AppUser);
         } else {
-           // This indicates a new user that needs to go through the registration form.
            setAppUser(null);
         }
         setLoading(false);
