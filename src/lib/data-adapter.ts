@@ -1221,3 +1221,43 @@ export const getTodayAttendanceStats = async (): Promise<{
     return { presentUsers: 0, totalUsers: 0, statsByGrade: {} };
   }
 };
+
+export const updateLinkRequestStatus = async (token: string, status: 'opened' | 'linked' | 'done'): Promise<boolean> => {
+    try {
+        const linkRequestRef = doc(db, 'link_requests', token);
+        await updateDoc(linkRequestRef, {
+            status,
+            updatedAt: serverTimestamp(),
+        });
+        return true;
+    } catch (error) {
+        console.error('Link request status update error:', error);
+        return false;
+    }
+};
+
+export const createLinkRequest = async (token: string): Promise<boolean> => {
+    try {
+        const linkRequestRef = doc(db, 'link_requests', token);
+        await setDoc(linkRequestRef, {
+            token,
+            status: 'waiting',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        });
+        return true;
+    } catch (error) {
+        console.error('Failed to create link request:', error);
+        return false;
+    }
+};
+
+export const watchTokenStatus = (token: string, callback: (status: string, data?: any) => void): (() => void) => {
+    const linkRequestRef = doc(db, 'link_requests', token);
+    return onSnapshot(linkRequestRef, (doc) => {
+        if (doc.exists()) {
+            const data = doc.data() as LinkRequest;
+            callback(data.status, data);
+        }
+    });
+};
