@@ -1225,10 +1225,10 @@ export const getTodayAttendanceStats = async (): Promise<{
 export const updateLinkRequestStatus = async (token: string, status: 'opened' | 'linked' | 'done'): Promise<boolean> => {
     try {
         const linkRequestRef = doc(db, 'link_requests', token);
-        await updateDoc(linkRequestRef, {
+        await setDoc(linkRequestRef, {
             status,
             updatedAt: serverTimestamp(),
-        });
+        }, { merge: true });
         return true;
     } catch (error) {
         console.error('Link request status update error:', error);
