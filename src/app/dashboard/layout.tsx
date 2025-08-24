@@ -1,3 +1,4 @@
+
 'use client';
 
 import SidebarLayout from '@/components/layout/sidebar-layout';

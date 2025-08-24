@@ -38,17 +38,14 @@ export const useAttendanceData = (currentDate: Date) => {
     
     // キャッシュがあれば先に表示
     if (monthlyCache[monthKey] && !forceRefresh) {
-      console.log('💾 キャッシュから即座に取得:', monthKey);
       setMonthlyData(monthlyCache[monthKey]);
       setCacheStatus('cached'); // まずキャッシュから表示したことを示す
     }
 
     setMonthlyLoading(true);
-    // キャッシュがあっても通信は行うのでloadingにする
     setCacheStatus(prev => (prev === 'cached' ? 'loading' : 'loading'));
     
     try {
-      console.log('📊 月次データを取得中...', format(currentDate, 'yyyy年MM月'));
       
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
@@ -57,9 +54,7 @@ export const useAttendanceData = (currentDate: Date) => {
         await invalidateMonthlyCache(year, month);
       }
       
-      const startTime = Date.now();
       const monthlyStats = await calculateMonthlyAttendanceStatsWithCacheV2(year, month);
-      const endTime = Date.now();
       
       const convertedData: Record<string, MonthlyData> = {};
       Object.entries(monthlyStats).forEach(([dateKey, stats]) => {
@@ -77,12 +72,10 @@ export const useAttendanceData = (currentDate: Date) => {
       }));
       
       setCacheStatus('fresh');
-      console.log(`✅ 新データ構造: ${Object.keys(convertedData).length}日分 (${endTime - startTime}ms)`);
 
     } catch (error) {
       console.error('❌ 月次データ取得エラー:', error);
       setCacheStatus('error');
-      // エラーが発生しても、古いキャッシュがあればそれを表示し続ける
       if (!monthlyCache[monthKey]) {
         setMonthlyData({});
       }

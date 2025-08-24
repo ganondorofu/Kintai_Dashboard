@@ -15,8 +15,6 @@ import {
   LogOut,
   Shield,
 } from 'lucide-react';
-import { getAllTeams } from '@/lib/data-adapter';
-import type { AppUser, Team } from '@/types';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { convertToJapaneseGrade } from '@/lib/utils';

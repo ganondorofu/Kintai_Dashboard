@@ -45,12 +45,9 @@ export function AttendanceCalendar({ currentUser }: AttendanceCalendarProps) {
 
   // 日付クリック処理
   const handleDateClick = async (date: Date) => {
-    // 即座にUIを更新（楽観的UI）
     setSelectedDate(date);
-    
-    // キャッシュから即座に表示を試行
     setLoading(true);
-    setDayStats([]); // 前のデータをクリア
+    setDayStats([]);
     
     try {
       const stats = await fetchDayStats(date);
