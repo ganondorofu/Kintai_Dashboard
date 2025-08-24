@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { getTeamMembers, getAllUsers, getAllTeams, updateUser, formatKisei, createAttendanceLogV2, getDailyAttendanceStatsV2 } from '@/lib/data-adapter';
+import { updateUser, formatKisei, createAttendanceLogV2, getDailyAttendanceStatsV2 } from '@/lib/data-adapter';
 import type { AppUser, AttendanceLog, Team } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -33,7 +33,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
   const handleUserUpdate = async (uid: string, updates: Partial<AppUser>) => {
     try {
       await updateUser(uid, updates);
-      await refreshData(); // データを再取得して全体の状態を更新
+      await refreshData();
       setEditingUser(null);
       toast({ title: '成功', description: 'ユーザー情報が更新されました。' });
     } catch (error) {
@@ -50,7 +50,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
         title: '成功',
         description: `${user.lastname} ${user.firstname}さんを${type === 'entry' ? '出勤' : '退勤'}させました。`,
       });
-      // Refresh data to show updated status
       await refreshData();
     } catch (error) {
       console.error('手動勤怠記録エラー:', error);

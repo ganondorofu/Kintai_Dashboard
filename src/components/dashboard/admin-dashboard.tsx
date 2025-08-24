@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { TeamManagement } from './team-management';
 import { AttendanceCalendar } from './attendance-calendar';
@@ -20,7 +20,6 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'users' | 'calendar'>('users');
   const [isForcingCheckout, setIsForcingCheckout] = useState(false);
 
-  // forceClockOutAllUsers関数をコンポーネント内に移動
   const forceClockOutAllUsers = async (): Promise<{ success: number; failed: number; noAction: number; }> => {
     let success = 0;
     let failed = 0;
@@ -90,6 +89,32 @@ export default function AdminDashboard() {
       setIsForcingCheckout(false);
     }
   };
+
+  useEffect(() => {
+    const scheduleAutoCheckout = () => {
+      const now = new Date();
+      const nextCheckout = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 0, 0);
+
+      if (now > nextCheckout) {
+        nextCheckout.setDate(nextCheckout.getDate() + 1);
+      }
+
+      const delay = nextCheckout.getTime() - now.getTime();
+
+      const timeoutId = setTimeout(() => {
+        handleForceCheckout();
+        // Schedule next checkout after 24 hours
+        setInterval(handleForceCheckout, 24 * 60 * 60 * 1000);
+      }, delay);
+      
+      return timeoutId;
+    };
+
+    const timeoutId = scheduleAutoCheckout();
+
+    return () => clearTimeout(timeoutId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!appUser) return <Skeleton className="h-96 w-full" />;
 
