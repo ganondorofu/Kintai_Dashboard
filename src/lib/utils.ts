@@ -22,3 +22,19 @@ export function convertToJapaneseGrade(grade: number): string {
   }
   return `${grade}期生`;
 }
+
+export function convertGradeToDisplay(grade: any): string {
+  if (typeof grade === 'number') {
+    return convertToJapaneseGrade(grade);
+  }
+  
+  if (typeof grade === 'string') {
+    const num = parseInt(grade);
+    if (!isNaN(num)) {
+      return convertToJapaneseGrade(num);
+    }
+    return grade;
+  }
+  
+  return '不明';
+};

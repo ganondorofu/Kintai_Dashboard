@@ -28,11 +28,11 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
       case 'loading':
         return { text: '通信中...', variant: 'default' as const, className: 'bg-yellow-500 text-white animate-pulse' };
       case 'cached':
-        return { text: 'キャッシュ', variant: 'outline' as const, className: 'border-blue-500 text-blue-600' };
+        return { text: 'キャッシュ', variant: 'outline' as const, className: 'border-primary text-primary' };
       case 'fresh':
         return { text: '最新', variant: 'default' as const, className: 'bg-green-500 text-white' };
       case 'error':
-        return { text: 'エラー', variant: 'destructive' as const, className: 'bg-red-500 text-white' };
+        return { text: 'エラー', variant: 'destructive' as const };
       default:
         return null;
     }
@@ -76,7 +76,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
             <Menu className="h-6 w-6" />
           </button>
           <div className="flex-1 px-6 flex justify-between items-center">
-            <h1 className="text-xl font-semibold text-gray-900">STEM研究部勤怠管理システム</h1>
+            <h1 className="text-xl font-semibold text-gray-900">IT勤怠管理システム</h1>
             {isClient && statusLabel && (
               <Badge variant={statusLabel.variant} className={statusLabel.className}>
                 {statusLabel.text}

@@ -46,6 +46,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           const isCurrentMonth = isSameMonth(day, currentDate);
           const isDayToday = isToday(day);
           const isSelected = selectedDate && day.toDateString() === selectedDate.toDateString();
+          const totalAttendance = getTotalAttendance(day);
           
           return (
             <div
@@ -64,9 +65,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               <div className="font-semibold text-sm">
                 {format(day, 'd')}
               </div>
-              {isCurrentMonth && !monthlyLoading && getTotalAttendance(day) > 0 && (
-                <div className="text-xs text-blue-600 mt-1 font-medium">
-                  {getTotalAttendance(day)}人
+              {isCurrentMonth && !monthlyLoading && totalAttendance > 0 && (
+                <div className="text-xs text-primary mt-1 font-medium">
+                  {totalAttendance}人
                 </div>
               )}
               {isCurrentMonth && monthlyLoading && (

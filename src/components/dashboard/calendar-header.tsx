@@ -3,7 +3,8 @@
 
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface CalendarHeaderProps {
   currentDate: Date;
@@ -21,37 +22,43 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
   return (
     <div className="flex items-center justify-between mb-6">
       <h2 className="text-2xl font-bold">出席カレンダー</h2>
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-2">
         
-        <button
+        <Button
+          variant="outline"
+          size="icon"
           onClick={() => onNavigateMonth('prev')}
-          className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
           disabled={monthlyLoading}
+          className="h-8 w-8"
         >
-          ←
-        </button>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
         
         <div className="text-lg font-semibold min-w-[150px] text-center flex items-center justify-center">
-          <span>{format(currentDate, 'yyyy年MM月', { locale: ja })}</span>
+          <span>{format(currentDate, 'yyyy年 M月', { locale: ja })}</span>
         </div>
         
-        <button
+        <Button
+          variant="outline"
+          size="icon"
           onClick={() => onNavigateMonth('next')}
-          className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
           disabled={monthlyLoading}
+          className="h-8 w-8"
         >
-          →
-        </button>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
         
         {onRefresh && (
-          <button
+          <Button
+            variant="outline"
+            size="icon"
             onClick={onRefresh}
-            className="p-2 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-600 disabled:opacity-50"
+            className="h-8 w-8"
             title="データを再取得"
             disabled={monthlyLoading}
           >
             <RefreshCw className={`h-4 w-4 ${monthlyLoading ? 'animate-spin' : ''}`} />
-          </button>
+          </Button>
         )}
       </div>
     </div>

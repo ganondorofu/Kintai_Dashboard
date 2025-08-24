@@ -37,7 +37,7 @@ export const useAttendanceData = (currentDate: Date) => {
     const monthKey = getCurrentMonthKey();
     
     // キャッシュがあれば先に表示
-    if (monthlyCache && monthlyCache[monthKey] && !forceRefresh) {
+    if (monthlyCache[monthKey] && !forceRefresh) {
       console.log('💾 キャッシュから即座に取得:', monthKey);
       setMonthlyData(monthlyCache[monthKey]);
       setCacheStatus('cached'); // まずキャッシュから表示したことを示す
@@ -83,7 +83,7 @@ export const useAttendanceData = (currentDate: Date) => {
       console.error('❌ 月次データ取得エラー:', error);
       setCacheStatus('error');
       // エラーが発生しても、古いキャッシュがあればそれを表示し続ける
-      if (!monthlyCache || !monthlyCache[monthKey]) {
+      if (!monthlyCache[monthKey]) {
         setMonthlyData({});
       }
     } finally {
@@ -94,7 +94,7 @@ export const useAttendanceData = (currentDate: Date) => {
   // 月が変わったら月次データを取得
   useEffect(() => {
     fetchMonthlyData();
-  }, [currentDate.getFullYear(), currentDate.getMonth()]);
+  }, [currentDate.getFullYear(), currentDate.getMonth(), fetchMonthlyData]);
 
   // 日別統計を取得
   const fetchDayStats = useCallback(async (date: Date): Promise<DayStats[]> => {

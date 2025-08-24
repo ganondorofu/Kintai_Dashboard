@@ -3,8 +3,9 @@
 
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { convertGradeToDisplay } from '@/lib/attendance-utils';
+import { convertGradeToDisplay } from '@/lib/utils';
 import type { DayStats } from '@/hooks/use-attendance-data';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface DayDetailProps {
   selectedDate: Date;
@@ -25,9 +26,9 @@ export const DayDetail: React.FC<DayDetailProps> = ({
     <div className="bg-white shadow rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold">
-          {format(selectedDate, 'yyyy年MM月dd日', { locale: ja })} の出席状況
+          {format(selectedDate, 'yyyy年MM月dd日 (E)', { locale: ja })} の出席状況
         </h3>
-        {totalAttendees > 0 && (
+        {totalAttendees > 0 && !loading && (
           <span className="font-bold text-gray-800">
             合計: {totalAttendees}人
           </span>
@@ -35,8 +36,9 @@ export const DayDetail: React.FC<DayDetailProps> = ({
       </div>
 
       {loading ? (
-        <div className="flex justify-center p-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        <div className="space-y-4">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-16 w-full" />
         </div>
       ) : totalAttendees > 0 ? (
         <div className="space-y-6">
@@ -53,7 +55,7 @@ export const DayDetail: React.FC<DayDetailProps> = ({
                     .map(gradeStat => (
                     <div key={gradeStat.grade} className="bg-gray-50 rounded p-3 text-center">
                         <div className="font-medium">{convertGradeToDisplay(gradeStat.grade)}</div>
-                        <div className="text-2xl font-bold text-blue-600 mt-1">
+                        <div className="text-2xl font-bold text-primary mt-1">
                             {gradeStat.count}人
                         </div>
                     </div>

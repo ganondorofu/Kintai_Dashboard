@@ -30,7 +30,7 @@ const StatItem = ({ label, value, subtext }: { label: string, value: React.React
     </div>
   );
 
-export default function UserDashboard({ user }: UserDashboardProps) {
+export default function UserDashboard({ user }: { user: AppUser }) {
   const { allTeams, isLoading: isDashboardLoading } = useDashboard();
   const [teamName, setTeamName] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
