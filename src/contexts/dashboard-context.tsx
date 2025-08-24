@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getAllUsers, getAllTeams } from '@/lib/data-adapter';
 import type { AppUser, Team, CacheStatus } from '@/types';
 
@@ -26,7 +26,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [cacheStatus, setCacheStatus] = useState<CacheStatus>('idle');
 
 
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     setIsLoading(true);
     console.log('DashboardProvider: Loading initial data...');
     try {
@@ -42,11 +42,11 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadInitialData();
-  }, []);
+  }, [loadInitialData]);
 
   const value: DashboardContextType = {
     allUsers,

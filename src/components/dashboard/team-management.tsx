@@ -72,7 +72,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
   if (isDashboardLoading) {
     return (
       <div className="flex justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -234,7 +234,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
                   grade: editingUser.grade,
                   cardId: editingUser.cardId,
                 })}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
               >
                 保存
               </button>
