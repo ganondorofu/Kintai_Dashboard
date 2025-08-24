@@ -118,8 +118,8 @@ export const useAttendanceData = (currentDate: Date) => {
   // 特定日の出席者数を取得
   const getTotalAttendance = useCallback((date: Date): number => {
     const dateKey = date.toDateString();
-    const monthlyDayData = monthlyData[dateKey];
-    return monthlyDayData?.totalCount || 0;
+    const dayData = monthlyData[dateKey];
+    return dayData?.totalCount || 0;
   }, [monthlyData]);
 
   return {
