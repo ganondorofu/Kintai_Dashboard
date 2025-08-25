@@ -18,7 +18,7 @@ import {
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { getDailyAttendanceStatsV2, getTeamMembers } from '@/lib/data-adapter';
-import { convertToJapaneseGrade } from '@/lib/utils';
+import type { AppUser } from '@/types';
 
 
 interface TeamMember {
@@ -233,7 +233,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
                                 : "text-muted-foreground"
                             )}
                           >
-                            {member.isPresent ? '出勤中' : '不在'}
+                            {member.isPresent ? '出勤中' : '退勤'}
                           </Badge>
                         </div>
                       )) : (
