@@ -18,7 +18,6 @@ interface MemberStats {
   attendedDays: number;
   attendanceRate: number;
   recentAttendance: any[]; // Changed to any to match processed data
-  averageCheckInTime: string;
   totalWorkHours: number;
 }
 
@@ -84,22 +83,6 @@ export default function MemberStatsPage() {
         
         const attendedDays = attendanceRecords.filter(record => record.checkInTime && workdaysSet.has(record.date)).length;
         const attendanceRate = totalWorkdays > 0 ? Math.round((attendedDays / totalWorkdays) * 100) : 0;
-
-        // 平均チェックイン時間を計算
-        const checkInTimes = attendanceRecords
-          .filter(record => record.checkInTime)
-          .map(record => new Date(record.checkInTime));
-        
-        let averageCheckInTime = '--:--';
-        if (checkInTimes.length > 0) {
-          const avgTimeInMs = checkInTimes.reduce((sum, time) => {
-            return sum + (time.getHours() * 60 + time.getMinutes());
-          }, 0) / checkInTimes.length;
-          
-          const hours = Math.floor(avgTimeInMs / 60);
-          const minutes = Math.round(avgTimeInMs % 60);
-          averageCheckInTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-        }
         
         // 総労働時間を計算
         let totalStayMinutes = 0;
@@ -121,7 +104,6 @@ export default function MemberStatsPage() {
           attendedDays,
           attendanceRate,
           recentAttendance: attendanceRecords.slice(0, 10), // 最新10件
-          averageCheckInTime,
           totalWorkHours: parseFloat(totalWorkHours.toFixed(1))
         });
       } catch (error) {
@@ -168,7 +150,7 @@ export default function MemberStatsPage() {
     );
   }
 
-  const { user, totalWorkdays, attendedDays, attendanceRate, recentAttendance, averageCheckInTime, totalWorkHours } = memberStats;
+  const { user, totalWorkdays, attendedDays, attendanceRate, recentAttendance, totalWorkHours } = memberStats;
 
   return (
     <div className="p-6 space-y-6">
@@ -196,7 +178,7 @@ export default function MemberStatsPage() {
       </div>
 
       {/* 統計カード */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">出勤率 (対活動日)</CardTitle>
@@ -216,17 +198,6 @@ export default function MemberStatsPage() {
           <CardContent>
             <div className="text-2xl font-bold">{attendedDays}日</div>
             <p className="text-xs text-muted-foreground">{totalWorkdays}活動日中</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">平均チェックイン</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{averageCheckInTime}</div>
-            <p className="text-xs text-muted-foreground">過去30日間の平均</p>
           </CardContent>
         </Card>
 

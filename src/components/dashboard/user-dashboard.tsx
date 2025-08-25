@@ -15,7 +15,6 @@ interface Stats {
   attendanceRate: number;
   attendedDaysLast30Days: number;
   totalWorkdaysLast30Days: number;
-  averageCheckInTime: string;
   totalWorkHours: number;
 }
 
@@ -85,28 +84,12 @@ export default function UserDashboard({ user }: { user: AppUser }) {
             }
         });
   
-        const checkInTimes = Array.from(logsByDate.values())
-          .map(d => d.checkIn)
-          .filter((d): d is Date => d !== null);
-        
-        let averageCheckInTime = '--:--';
-        if (checkInTimes.length > 0) {
-          const avgTimeInMs = checkInTimes.reduce((sum, time) => {
-            return sum + (time.getHours() * 60 + time.getMinutes());
-          }, 0) / checkInTimes.length;
-          
-          const hours = Math.floor(avgTimeInMs / 60);
-          const minutes = Math.round(avgTimeInMs % 60);
-          averageCheckInTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-        }
-        
         const totalWorkHours = totalStayMinutes / 60;
   
         setStats({
           attendanceRate,
           attendedDaysLast30Days,
           totalWorkdaysLast30Days: workdaysLast30Days.length,
-          averageCheckInTime,
           totalWorkHours: parseFloat(totalWorkHours.toFixed(1))
         });
       } catch (e) {
@@ -158,7 +141,6 @@ export default function UserDashboard({ user }: { user: AppUser }) {
                   <Skeleton className="h-6 w-full" />
                   <Skeleton className="h-6 w-full" />
                   <Skeleton className="h-6 w-full" />
-                  <Skeleton className="h-6 w-full" />
                 </CardContent>
             </Card>
           ) : stats ? (
@@ -174,11 +156,6 @@ export default function UserDashboard({ user }: { user: AppUser }) {
                         label="出勤日数"
                         subtext={`${stats.totalWorkdaysLast30Days}活動日中`}
                         value={`${stats.attendedDaysLast30Days}日`}
-                    />
-                    <StatItem 
-                      label="平均チェックイン"
-                      subtext="過去30日間の平均"
-                      value={stats.averageCheckInTime} 
                     />
                     <StatItem 
                       label="総労働時間" 
