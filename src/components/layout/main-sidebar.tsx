@@ -18,6 +18,8 @@ import {
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { getDailyAttendanceStatsV2, getTeamMembers } from '@/lib/data-adapter';
+import { convertToJapaneseGrade } from '@/lib/utils';
+
 
 interface TeamMember {
   uid: string;
@@ -25,7 +27,6 @@ interface TeamMember {
   lastname: string;
   github: string;
   isPresent: boolean;
-  status: '出勤中' | '退勤';
 }
 
 interface TeamData {
@@ -42,7 +43,7 @@ interface MainSidebarProps {
 
 export default function MainSidebar({ onClose }: MainSidebarProps) {
   const { appUser, signOut } = useAuth();
-  const { allTeams } = useDashboard();
+  const { allTeams, allUsers: allUsersFromContext } = useDashboard();
   const pathname = usePathname();
   const router = useRouter();
   const [teams, setTeams] = useState<TeamData[]>([]);
@@ -57,49 +58,51 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
       try {
         const todayStats = await getDailyAttendanceStatsV2(new Date());
         
-        const teamNameMap = allTeams.reduce((acc, team) => {
-          acc[team.id] = team.name;
-          return acc;
-        }, {} as Record<string, string>);
-
-        const teamDataPromises = allTeams.map(async (team) => {
-          const teamStat = todayStats.find(t => t.teamId === team.id);
-          
-          let presentMembers: TeamMember[] = [];
-          let presentCount = 0;
-          let totalCount = 0;
-
-          const teamMembers = await getTeamMembers(team.id);
-          totalCount = teamMembers.length;
-
-          if (teamStat) {
-            teamStat.gradeStats.forEach(grade => {
+        const presentUids = new Set<string>();
+        todayStats.forEach(team => {
+            team.gradeStats.forEach(grade => {
                 grade.users.forEach(user => {
                     if (user.isPresent) {
-                        presentMembers.push({
-                            ...user,
-                            status: '出勤中'
-                        });
+                        presentUids.add(user.uid);
                     }
                 });
             });
-             presentCount = presentMembers.length;
-          }
+        });
 
-          return {
-            teamId: team.id,
-            teamName: team.name,
-            members: presentMembers,
-            presentCount,
-            totalCount
-          };
+        const teamMap = new Map<string, AppUser[]>();
+        allUsersFromContext.forEach(user => {
+            if (user.teamId) {
+                if (!teamMap.has(user.teamId)) {
+                    teamMap.set(user.teamId, []);
+                }
+                teamMap.get(user.teamId)!.push(user);
+            }
+        });
+
+        const teamDataPromises = allTeams.map(async (team) => {
+            const members = teamMap.get(team.id) || [];
+            const presentMembers = members.filter(m => presentUids.has(m.uid));
+            
+            return {
+                teamId: team.id,
+                teamName: team.name,
+                members: members.map(m => ({
+                    uid: m.uid,
+                    firstname: m.firstname,
+                    lastname: m.lastname,
+                    github: m.github,
+                    isPresent: presentUids.has(m.uid)
+                })).sort((a, b) => a.lastname.localeCompare(b.lastname, 'ja')),
+                presentCount: presentMembers.length,
+                totalCount: members.length,
+            };
         });
 
         const resolvedTeams = await Promise.all(teamDataPromises);
         const sortedTeams = resolvedTeams
           .filter(team => team.totalCount > 0) // メンバーがいない班は表示しない
           .sort((a, b) => a.teamName.localeCompare(b.teamName, 'ja'));
-
+        
         setTeams(sortedTeams);
       } catch (error) {
         console.error('サイドバーのチームデータ構築エラー:', error);
@@ -108,10 +111,10 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
       }
     };
 
-    if (allTeams.length > 0) {
+    if (allTeams.length > 0 && allUsersFromContext.length > 0) {
       buildTeamData();
     }
-  }, [allTeams]);
+  }, [allTeams, allUsersFromContext]);
 
   const handleTeamClick = (teamId: string) => {
     if (isAdmin) {
@@ -221,16 +224,21 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
                           <span className="truncate text-left">
                             {member.lastname} {member.firstname}
                           </span>
-                          <Badge 
-                            variant="default"
-                            className="text-xs bg-green-500/20 text-green-700 border-green-500/30"
+                           <Badge 
+                            variant={member.isPresent ? "default" : "outline"}
+                            className={cn(
+                                "text-xs",
+                                member.isPresent 
+                                ? "bg-green-500/20 text-green-700 border-green-500/30"
+                                : "text-muted-foreground"
+                            )}
                           >
-                            出勤中
+                            {member.isPresent ? '出勤中' : '不在'}
                           </Badge>
                         </div>
                       )) : (
                         <div className="px-3 py-1 text-xs text-sidebar-foreground/70">
-                          現在、出勤中のメンバーはいません。
+                          メンバーがいません。
                         </div>
                       )}
                   </AccordionContent>

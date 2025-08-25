@@ -189,7 +189,7 @@ export default function MemberStatsPage() {
               {user.lastname} {user.firstname}
             </h1>
             <p className="text-gray-600">
-              {convertToJapaneseGrade(user.grade)} | {user.github}
+              {convertToJapaneseGrade(user.grade)}
             </p>
           </div>
         </div>
