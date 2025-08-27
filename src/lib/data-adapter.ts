@@ -1150,11 +1150,12 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     const userData = userDoc.data() as AppUser;
     const userId = userDoc.id;
 
-    // ユーザーの現在の勤怠ステータスを確認
-    const isCurrentlyActive = userData.status === 'active';
+    // 最新のログを取得して次のアクションを決定
+    const latestLogs = await getUserAttendanceLogsV2(userId, undefined, undefined, 1);
+    const lastAction = latestLogs.length > 0 ? latestLogs[0].type : 'exit'; // ログがなければ出勤
     
-    const newStatus = isCurrentlyActive ? 'inactive' : 'active';
-    const logType: 'entry' | 'exit' = isCurrentlyActive ? 'exit' : 'entry';
+    const newLogType: 'entry' | 'exit' = lastAction === 'entry' ? 'exit' : 'entry';
+    const newStatus = newLogType === 'entry' ? 'active' : 'inactive';
 
     const batch = writeBatch(db);
 
@@ -1168,7 +1169,7 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     batch.set(newLogRef, {
       uid: userId,
       cardId: cardId,
-      type: logType,
+      type: newLogType,
       timestamp: serverTimestamp(),
     });
 
@@ -1182,7 +1183,7 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     await batch.commit();
 
     const userName = `${userData.lastname} ${userData.firstname}`;
-    const actionMsg = logType === 'entry' ? '出勤を記録しました' : '退勤を記録しました';
+    const actionMsg = newLogType === 'entry' ? '出勤を記録しました' : '退勤を記録しました';
 
     return { status: 'success', message: `ようこそ、${userName}さん`, subMessage: actionMsg };
   } catch (err) {
