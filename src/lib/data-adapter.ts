@@ -207,11 +207,12 @@ const calculateDailyAttendanceFromLogsData = async (
     });
     
     const teamGroups = allUsers.reduce((acc, user) => {
-      const teamId = user.teamId || 'unassigned';
-      if (!acc[teamId]) {
-        acc[teamId] = [];
+      if (user.teamId) {
+        if (!acc[user.teamId]) {
+          acc[user.teamId] = [];
+        }
+        acc[user.teamId].push(user);
       }
-      acc[teamId].push(user);
       return acc;
     }, {} as Record<string, AppUser[]>);
 
@@ -1150,9 +1151,17 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     const userId = userDoc.id;
 
     // 最新のログを取得して次のアクションを決定
-    const latestLogs = await getUserAttendanceLogsV2(userId, undefined, undefined, 1);
-    const lastAction = latestLogs.length > 0 ? latestLogs[0].type : 'exit'; // ログがなければ出勤
+    const allLogs = await getUserAttendanceLogsV2(userId, undefined, undefined, 1);
+    const legacyLogs = await getUserAttendanceLogs(userId, undefined, undefined, 1);
     
+    const latestLog = [ ...allLogs, ...legacyLogs]
+      .sort((a, b) => {
+        const timeA = safeTimestampToDate(a.timestamp)?.getTime() || 0;
+        const timeB = safeTimestampToDate(b.timestamp)?.getTime() || 0;
+        return timeB - timeA;
+      })[0];
+      
+    const lastAction = latestLog ? latestLog.type : 'exit'; // ログがなければ出勤
     const newLogType: 'entry' | 'exit' = lastAction === 'entry' ? 'exit' : 'entry';
     const newStatus = newLogType === 'entry' ? 'active' : 'inactive';
 
@@ -1271,13 +1280,15 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('status', '==', 'active'));
     const activeUsersSnapshot = await getDocs(q);
+    
+    const totalUserCount = (await getDocs(collection(db, 'users'))).size;
 
     if (activeUsersSnapshot.empty) {
-      noAction = (await getDocs(collection(db, 'users'))).size;
+      noAction = totalUserCount;
       return { success, failed, noAction };
     }
     
-    noAction = (await getDocs(collection(db, 'users'))).size - activeUsersSnapshot.size;
+    noAction = totalUserCount - activeUsersSnapshot.size;
     
     const batch = writeBatch(db);
     const now = new Date();
@@ -1314,3 +1325,5 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
   
   return { success, failed, noAction };
 };
+
+    
