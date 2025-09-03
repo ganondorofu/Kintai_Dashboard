@@ -32,7 +32,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
 
   const handleUserUpdate = async (uid: string, updates: Partial<AppUser>) => {
     try {
-      await updateUser(uid, updates);
+      const sanitizedUpdates = { ...updates };
+      if (sanitizedUpdates.cardId) {
+        sanitizedUpdates.cardId = sanitizedUpdates.cardId.replace(/:/g, '').toLowerCase();
+      }
+
+      await updateUser(uid, sanitizedUpdates);
       await refreshData();
       setEditingUser(null);
       toast({ title: '成功', description: 'ユーザー情報が更新されました。' });
