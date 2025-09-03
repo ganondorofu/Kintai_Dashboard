@@ -10,10 +10,12 @@ import type { AppUser } from '@/types';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useDashboard } from '@/contexts/dashboard-context';
 
 
 export default function AdminDashboard() {
   const { appUser } = useAuth();
+  const { refreshData } = useDashboard();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'users' | 'calendar'>('users');
   const [isForcingCheckout, setIsForcingCheckout] = useState(false);
@@ -26,6 +28,7 @@ export default function AdminDashboard() {
         title: "強制退勤処理が完了しました",
         description: `退勤処理: ${result.success}件, 対象外: ${result.noAction}件, 失敗: ${result.failed}件`,
       });
+      await refreshData(); // データを再取得
     } catch (error) {
       console.error('強制退勤エラー:', error);
       toast({
