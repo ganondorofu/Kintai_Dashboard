@@ -1,5 +1,4 @@
 
-
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
@@ -224,7 +223,7 @@ const calculateDailyAttendanceFromLogsData = async (
         }
         acc[kiseiNumber].push(user);
         return acc;
-      }, {} as Record<number, AppUser[]>);
+      }, {} as Record<string, AppUser[]>);
 
       const gradeStats = Object.entries(gradeGroups).map(([gradeStr, gradeUsers]) => {
           const gradePresentUsers = gradeUsers.filter(u => attendedUids.has(u.uid));
@@ -1269,48 +1268,46 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
   let noAction = 0;
 
   try {
-    const allUsers = await getAllUsers();
-    if (allUsers.length === 0) {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('status', '==', 'active'));
+    const activeUsersSnapshot = await getDocs(q);
+
+    if (activeUsersSnapshot.empty) {
+      noAction = (await getDocs(collection(db, 'users'))).size;
       return { success, failed, noAction };
     }
-
+    
+    noAction = (await getDocs(collection(db, 'users'))).size - activeUsersSnapshot.size;
+    
     const batch = writeBatch(db);
     const now = new Date();
     const { year, month, day } = getAttendancePath(now);
     const dateKey = `${year}-${month}-${day}`;
-
-    for (const user of allUsers) {
-      const latestLogs = await getUserAttendanceLogsV2(user.uid, undefined, undefined, 1);
-      const lastLog = latestLogs.length > 0 ? latestLogs[0] : null;
+    
+    activeUsersSnapshot.docs.forEach(userDoc => {
+      const user = userDoc.data() as AppUser;
+      const logId = generateAttendanceLogId(user.uid);
+      const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
       
-      // 最新のログが 'entry' の場合のみ強制退勤の対象とする
-      if (lastLog && lastLog.type === 'entry') {
-        const logId = generateAttendanceLogId(user.uid);
-        const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
-        batch.set(newLogRef, {
-          uid: user.uid,
-          type: 'exit',
-          timestamp: serverTimestamp(),
-          cardId: 'force_checkout'
-        });
+      batch.set(newLogRef, {
+        uid: user.uid,
+        type: 'exit',
+        timestamp: serverTimestamp(),
+        cardId: 'force_checkout'
+      });
+      
+      const userRef = doc(db, 'users', user.uid);
+      batch.update(userRef, {
+        status: 'inactive',
+        last_activity: serverTimestamp()
+      });
+      success++;
+    });
 
-        const userRef = doc(db, 'users', user.uid);
-        batch.update(userRef, {
-          status: 'inactive',
-          last_activity: serverTimestamp()
-        });
-        success++;
-      } else {
-        noAction++;
-      }
-    }
+    await batch.commit();
 
-    if (success > 0) {
-      await batch.commit();
-    }
   } catch (error) {
     console.error("強制退勤処理エラー:", error);
-    // この時点での成功数は0とみなし、エラーが発生したことを示す
     failed = success; 
     success = 0;
   }
