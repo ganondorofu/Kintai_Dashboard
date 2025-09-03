@@ -1,5 +1,5 @@
 
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch, collectionGroup } from 'firebase/firestore';
 import { db } from './firebase';
 import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
 import type { GitHubUser } from './oauth';
@@ -1138,7 +1138,8 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
   subMessage?: string;
 }> => {
   try {
-    const usersRef = collection(db, 'users');
+    // `users`コレクションを階層を問わず検索
+    const usersRef = collectionGroup(db, 'users');
     const userQuery = query(usersRef, where('cardId', '==', cardId), limit(1));
     const userSnapshot = await getDocs(userQuery);
 
@@ -1182,8 +1183,8 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     });
 
     // ユーザーのステータスと最終活動時刻を更新
-    const userDocRef = doc(db, 'users', userId);
-    batch.update(userDocRef, {
+    // userDoc.ref を使ってドキュメントの正確なパスを取得
+    batch.update(userDoc.ref, {
       status: newStatus,
       last_activity: serverTimestamp(),
     });
@@ -1199,6 +1200,7 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     return { status: 'error', message: 'エラーが発生しました', subMessage: 'もう一度お試しください' };
   }
 };
+
 
 export const getTodayAttendanceStats = async (): Promise<{
   presentUsers: number;
@@ -1278,25 +1280,55 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
 
   try {
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('status', '==', 'active'));
-    const activeUsersSnapshot = await getDocs(q);
+    const allUsersSnapshot = await getDocs(usersRef);
+    const totalUserCount = allUsersSnapshot.size;
     
-    const totalUserCount = (await getDocs(collection(db, 'users'))).size;
+    // 全ユーザーの最新ログを一度に取得（最新の日付から探す）
+    const now = new Date();
+    const logsPromises = [];
+    for(let i=0; i < 7; i++) { // 直近7日分をチェック
+      const date = new Date(now);
+      date.setDate(now.getDate() - i);
+      const { year, month, day } = getAttendancePath(date);
+      const dateKey = `${year}-${month}-${day}`;
+      logsPromises.push(getDocs(collection(db, 'attendances', dateKey, 'logs')));
+    }
+    
+    const logsSnapshots = await Promise.all(logsPromises);
+    const allRecentLogs: AttendanceLog[] = [];
+    logsSnapshots.forEach(snap => {
+      snap.docs.forEach(d => allRecentLogs.push({id: d.id, ...d.data()} as AttendanceLog));
+    });
 
-    if (activeUsersSnapshot.empty) {
+    const latestLogMap = new Map<string, AttendanceLog>();
+    allRecentLogs.forEach(log => {
+      const existing = latestLogMap.get(log.uid);
+      if (!existing || (safeTimestampToDate(log.timestamp)?.getTime() || 0) > (safeTimestampToDate(existing.timestamp)?.getTime() || 0)) {
+        latestLogMap.set(log.uid, log);
+      }
+    });
+
+    const usersToClockOut: AppUser[] = [];
+    allUsersSnapshot.docs.forEach(userDoc => {
+      const user = { uid: userDoc.id, ...userDoc.data() } as AppUser;
+      const latestLog = latestLogMap.get(user.uid);
+      if (latestLog && latestLog.type === 'entry') {
+        usersToClockOut.push(user);
+      }
+    });
+
+    if (usersToClockOut.length === 0) {
       noAction = totalUserCount;
       return { success, failed, noAction };
     }
     
-    noAction = totalUserCount - activeUsersSnapshot.size;
+    noAction = totalUserCount - usersToClockOut.length;
     
     const batch = writeBatch(db);
-    const now = new Date();
     const { year, month, day } = getAttendancePath(now);
     const dateKey = `${year}-${month}-${day}`;
     
-    activeUsersSnapshot.docs.forEach(userDoc => {
-      const user = userDoc.data() as AppUser;
+    usersToClockOut.forEach(user => {
       const logId = generateAttendanceLogId(user.uid);
       const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
       
@@ -1325,5 +1357,3 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
   
   return { success, failed, noAction };
 };
-
-    
