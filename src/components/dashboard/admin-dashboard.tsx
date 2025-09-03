@@ -5,9 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { TeamManagement } from './team-management';
 import { AttendanceCalendar } from './attendance-calendar';
-import { writeBatch, collection, query, where, getDocs, doc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { generateAttendanceLogId, getAttendancePath } from '@/lib/data-adapter';
+import { forceClockOutAllActiveUsers } from '@/lib/data-adapter';
 import type { AppUser } from '@/types';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -20,63 +18,13 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'users' | 'calendar'>('users');
   const [isForcingCheckout, setIsForcingCheckout] = useState(false);
 
-  const forceClockOutAllUsers = async (): Promise<{ success: number; failed: number; noAction: number; }> => {
-    let success = 0;
-    let failed = 0;
-    let noAction = 0;
-
-    try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('status', '==', 'active'));
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty) {
-            return { success, failed, noAction };
-        }
-
-        const batch = writeBatch(db);
-        const now = new Date();
-        const { year, month, day } = getAttendancePath(now);
-        const dateKey = `${year}-${month}-${day}`;
-
-        snapshot.forEach(userDoc => {
-            const userId = userDoc.id;
-
-            const logId = generateAttendanceLogId(userId);
-            const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
-            batch.set(newLogRef, {
-                uid: userId,
-                type: 'exit',
-                timestamp: serverTimestamp(),
-                cardId: 'force_checkout'
-            });
-
-            const userRef = doc(db, 'users', userId);
-            batch.update(userRef, {
-                status: 'inactive',
-                last_activity: serverTimestamp()
-            });
-
-            success++;
-        });
-
-        await batch.commit();
-
-    } catch (error) {
-        console.error("強制退勤処理エラー:", error);
-        failed = snapshot.size - success;
-    }
-    
-    return { success, failed, noAction };
-};
-
   const handleForceCheckout = async () => {
     setIsForcingCheckout(true);
     try {
-      const result = await forceClockOutAllUsers();
+      const result = await forceClockOutAllActiveUsers();
       toast({
         title: "強制退勤処理が完了しました",
-        description: `成功: ${result.success}件, 対象外: ${result.noAction}件, 失敗: ${result.failed}件`,
+        description: `退勤処理: ${result.success}件, 対象外: ${result.noAction}件, 失敗: ${result.failed}件`,
       });
     } catch (error) {
       console.error('強制退勤エラー:', error);
@@ -100,7 +48,7 @@ export default function AdminDashboard() {
       }
 
       const delay = nextCheckout.getTime() - now.getTime();
-
+      
       const timeoutId = setTimeout(() => {
         handleForceCheckout();
         // Schedule next checkout after 24 hours
@@ -111,7 +59,7 @@ export default function AdminDashboard() {
     };
 
     const timeoutId = scheduleAutoCheckout();
-
+    
     return () => clearTimeout(timeoutId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -1262,3 +1262,58 @@ export const watchTokenStatus = (token: string, callback: (status: string, data?
         }
     });
 };
+
+export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, failed: number, noAction: number }> => {
+  let success = 0;
+  let failed = 0;
+  let noAction = 0;
+
+  try {
+    const allUsers = await getAllUsers();
+    if (allUsers.length === 0) {
+      return { success, failed, noAction };
+    }
+
+    const batch = writeBatch(db);
+    const now = new Date();
+    const { year, month, day } = getAttendancePath(now);
+    const dateKey = `${year}-${month}-${day}`;
+
+    for (const user of allUsers) {
+      const latestLogs = await getUserAttendanceLogsV2(user.uid, undefined, undefined, 1);
+      const lastLog = latestLogs.length > 0 ? latestLogs[0] : null;
+      
+      // 最新のログが 'entry' の場合のみ強制退勤の対象とする
+      if (lastLog && lastLog.type === 'entry') {
+        const logId = generateAttendanceLogId(user.uid);
+        const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
+        batch.set(newLogRef, {
+          uid: user.uid,
+          type: 'exit',
+          timestamp: serverTimestamp(),
+          cardId: 'force_checkout'
+        });
+
+        const userRef = doc(db, 'users', user.uid);
+        batch.update(userRef, {
+          status: 'inactive',
+          last_activity: serverTimestamp()
+        });
+        success++;
+      } else {
+        noAction++;
+      }
+    }
+
+    if (success > 0) {
+      await batch.commit();
+    }
+  } catch (error) {
+    console.error("強制退勤処理エラー:", error);
+    // この時点での成功数は0とみなし、エラーが発生したことを示す
+    failed = success; 
+    success = 0;
+  }
+  
+  return { success, failed, noAction };
+};
