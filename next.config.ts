@@ -24,6 +24,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '2mb', // サーバーアクションのペイロードサイズ制限を増やす
+      maxDuration: 30, // サーバーアクションのタイムアウトを30秒に設定
+    },
+  },
 };
 
 export default nextConfig;

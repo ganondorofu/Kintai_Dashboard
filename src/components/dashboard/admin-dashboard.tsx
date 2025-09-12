@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { TeamManagement } from './team-management';
 import { AttendanceCalendar } from './attendance-calendar';
@@ -28,7 +28,7 @@ export default function AdminDashboard() {
         title: "強制退勤処理が完了しました",
         description: `退勤処理: ${result.success}件, 対象外: ${result.noAction}件, 失敗: ${result.failed}件`,
       });
-      await refreshData(); // データを再取得
+      await refreshData();
     } catch (error) {
       console.error('強制退勤エラー:', error);
       toast({
@@ -40,32 +40,6 @@ export default function AdminDashboard() {
       setIsForcingCheckout(false);
     }
   };
-
-  useEffect(() => {
-    const scheduleAutoCheckout = () => {
-      const now = new Date();
-      const nextCheckout = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 0, 0);
-
-      if (now > nextCheckout) {
-        nextCheckout.setDate(nextCheckout.getDate() + 1);
-      }
-
-      const delay = nextCheckout.getTime() - now.getTime();
-      
-      const timeoutId = setTimeout(() => {
-        handleForceCheckout();
-        // Schedule next checkout after 24 hours
-        setInterval(handleForceCheckout, 24 * 60 * 60 * 1000);
-      }, delay);
-      
-      return timeoutId;
-    };
-
-    const timeoutId = scheduleAutoCheckout();
-    
-    return () => clearTimeout(timeoutId);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   if (!appUser) return <Skeleton className="h-96 w-full" />;
 
@@ -87,7 +61,7 @@ export default function AdminDashboard() {
                 </p>
             </div>
             <Button onClick={handleForceCheckout} variant="destructive" disabled={isForcingCheckout}>
-                {isForcingCheckout ? '処理中...' : '強制全員退勤'}
+                {isForcingCheckout ? '処理中...' : '手動で全員強制退勤'}
             </Button>
         </div>
       </div>

@@ -1,0 +1,8 @@
+# cron.yaml
+# https://firebase.google.com/docs/app-hosting/cron-jobs
+jobs:
+- schedule: "59 23 * * *"
+  timeZone: "Asia/Tokyo"
+  http:
+    method: "GET"
+    uri: "/api/force-clock-out"
