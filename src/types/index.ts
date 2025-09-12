@@ -84,3 +84,9 @@ export interface MonthlyAttendanceCache {
 }
 
 export type CacheStatus = 'idle' | 'loading' | 'cached' | 'fresh' | 'error';
+
+export interface CronSettings {
+  forceClockOutStartTime?: string; // HH:mm format
+  forceClockOutEndTime?: string; // HH:mm format
+  updatedAt?: Timestamp;
+}

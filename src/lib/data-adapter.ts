@@ -1,7 +1,7 @@
 
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch, collectionGroup } from 'firebase/firestore';
 import { db } from './firebase';
-import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache } from '@/types';
+import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache, CronSettings } from '@/types';
 import type { GitHubUser } from './oauth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
@@ -685,18 +685,24 @@ export const getDailyAttendanceStatsV2 = async (
 
 export const updateUser = async (uid: string, updates: Partial<AppUser>): Promise<boolean> => {
   try {
+    // collectionGroupを使って、サブコレクション内にある可能性も考慮してユーザーを検索
     const usersRef = collectionGroup(db, 'users');
     const q = query(usersRef, where('uid', '==', uid), limit(1));
     const userSnapshot = await getDocs(q);
 
-    if (userSnapshot.empty) {
-      // If not found in collectionGroup, try the top-level collection as a fallback
-      const topLevelUserRef = doc(db, 'users', uid);
-      const topLevelUserSnap = await getDoc(topLevelUserRef);
-      if(!topLevelUserSnap.exists()) {
-        console.error(`ユーザー(uid: ${uid})が見つかりません。`);
-        return false;
-      }
+    if (!userSnapshot.empty) {
+      const userDoc = userSnapshot.docs[0];
+      await updateDoc(userDoc.ref, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+      return true;
+    }
+
+    // fallback: usersのトップレベルコレクションを検索
+    const topLevelUserRef = doc(db, 'users', uid);
+    const topLevelUserSnap = await getDoc(topLevelUserRef);
+    if(topLevelUserSnap.exists()) {
       await updateDoc(topLevelUserRef, {
         ...updates,
         updatedAt: serverTimestamp()
@@ -704,13 +710,8 @@ export const updateUser = async (uid: string, updates: Partial<AppUser>): Promis
       return true;
     }
     
-    const userDoc = userSnapshot.docs[0];
-    await updateDoc(userDoc.ref, {
-      ...updates,
-      updatedAt: serverTimestamp()
-    });
-
-    return true;
+    console.error(`ユーザー(uid: ${uid})が見つかりません。`);
+    return false;
   } catch (error) {
     console.error('ユーザー更新エラー:', error);
     return false;
@@ -1202,8 +1203,7 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
       timestamp: serverTimestamp(),
     });
 
-    // ユーザーのステータスと最終活動時刻を更新
-    // userDoc.ref を使ってドキュメントの正確なパスを取得
+    // userDoc.ref を使ってドキュメントの正確なパスを取得して更新
     batch.update(userDoc.ref, {
       status: newStatus,
       last_activity: serverTimestamp(),
@@ -1338,9 +1338,38 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
 
   } catch (error) {
     console.error("強制退勤処理エラー:", error);
-    failed = success; 
+    failed = success > 0 ? success : (await getDocs(query(collection(db, 'users'), where('status', '==', 'active')))).size;
     success = 0;
   }
   
   return { success, failed, noAction };
+};
+
+
+export const getForceClockOutSettings = async (): Promise<CronSettings | null> => {
+  try {
+    const settingsRef = doc(db, 'settings', 'cron');
+    const docSnap = await getDoc(settingsRef);
+    if (docSnap.exists()) {
+      return docSnap.data() as CronSettings;
+    }
+    return null;
+  } catch (error) {
+    console.error("Error fetching cron settings:", error);
+    return null;
+  }
+};
+
+export const updateForceClockOutSettings = async (startTime: string, endTime: string): Promise<void> => {
+  try {
+    const settingsRef = doc(db, 'settings', 'cron');
+    await setDoc(settingsRef, {
+      forceClockOutStartTime: startTime,
+      forceClockOutEndTime: endTime,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  } catch (error) {
+    console.error("Error updating cron settings:", error);
+    throw error;
+  }
 };
