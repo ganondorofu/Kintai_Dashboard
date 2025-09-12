@@ -685,11 +685,31 @@ export const getDailyAttendanceStatsV2 = async (
 
 export const updateUser = async (uid: string, updates: Partial<AppUser>): Promise<boolean> => {
   try {
-    const userRef = doc(db, 'users', uid);
-    await updateDoc(userRef, {
+    const usersRef = collectionGroup(db, 'users');
+    const q = query(usersRef, where('uid', '==', uid), limit(1));
+    const userSnapshot = await getDocs(q);
+
+    if (userSnapshot.empty) {
+      // If not found in collectionGroup, try the top-level collection as a fallback
+      const topLevelUserRef = doc(db, 'users', uid);
+      const topLevelUserSnap = await getDoc(topLevelUserRef);
+      if(!topLevelUserSnap.exists()) {
+        console.error(`ユーザー(uid: ${uid})が見つかりません。`);
+        return false;
+      }
+      await updateDoc(topLevelUserRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+      return true;
+    }
+    
+    const userDoc = userSnapshot.docs[0];
+    await updateDoc(userDoc.ref, {
       ...updates,
       updatedAt: serverTimestamp()
     });
+
     return true;
   } catch (error) {
     console.error('ユーザー更新エラー:', error);
@@ -1280,55 +1300,23 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
 
   try {
     const usersRef = collection(db, 'users');
-    const allUsersSnapshot = await getDocs(usersRef);
-    const totalUserCount = allUsersSnapshot.size;
+    const q = query(usersRef, where('status', '==', 'active'));
+    const activeUsersSnapshot = await getDocs(q);
     
-    // 全ユーザーの最新ログを一度に取得（最新の日付から探す）
-    const now = new Date();
-    const logsPromises = [];
-    for(let i=0; i < 7; i++) { // 直近7日分をチェック
-      const date = new Date(now);
-      date.setDate(now.getDate() - i);
-      const { year, month, day } = getAttendancePath(date);
-      const dateKey = `${year}-${month}-${day}`;
-      logsPromises.push(getDocs(collection(db, 'attendances', dateKey, 'logs')));
-    }
-    
-    const logsSnapshots = await Promise.all(logsPromises);
-    const allRecentLogs: AttendanceLog[] = [];
-    logsSnapshots.forEach(snap => {
-      snap.docs.forEach(d => allRecentLogs.push({id: d.id, ...d.data()} as AttendanceLog));
-    });
+    const allUsersSnapshot = await getDocs(collection(db, 'users'));
+    noAction = allUsersSnapshot.size - activeUsersSnapshot.size;
 
-    const latestLogMap = new Map<string, AttendanceLog>();
-    allRecentLogs.forEach(log => {
-      const existing = latestLogMap.get(log.uid);
-      if (!existing || (safeTimestampToDate(log.timestamp)?.getTime() || 0) > (safeTimestampToDate(existing.timestamp)?.getTime() || 0)) {
-        latestLogMap.set(log.uid, log);
-      }
-    });
-
-    const usersToClockOut: AppUser[] = [];
-    allUsersSnapshot.docs.forEach(userDoc => {
-      const user = { uid: userDoc.id, ...userDoc.data() } as AppUser;
-      const latestLog = latestLogMap.get(user.uid);
-      if (latestLog && latestLog.type === 'entry') {
-        usersToClockOut.push(user);
-      }
-    });
-
-    if (usersToClockOut.length === 0) {
-      noAction = totalUserCount;
+    if (activeUsersSnapshot.empty) {
       return { success, failed, noAction };
     }
     
-    noAction = totalUserCount - usersToClockOut.length;
-    
     const batch = writeBatch(db);
+    const now = new Date();
     const { year, month, day } = getAttendancePath(now);
     const dateKey = `${year}-${month}-${day}`;
     
-    usersToClockOut.forEach(user => {
+    activeUsersSnapshot.docs.forEach(userDoc => {
+      const user = { uid: userDoc.id, ...userDoc.data() } as AppUser;
       const logId = generateAttendanceLogId(user.uid);
       const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
       
@@ -1339,8 +1327,7 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
         cardId: 'force_checkout'
       });
       
-      const userRef = doc(db, 'users', user.uid);
-      batch.update(userRef, {
+      batch.update(userDoc.ref, {
         status: 'inactive',
         last_activity: serverTimestamp()
       });
