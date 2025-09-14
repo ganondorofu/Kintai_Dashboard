@@ -857,7 +857,6 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
   subMessage?: string;
 }> => {
   try {
-    // `users`コレクションを階層を問わず検索
     const usersRef = collectionGroup(db, 'users');
     const userQuery = query(usersRef, where('cardId', '==', cardId), limit(1));
     const userSnapshot = await getDocs(userQuery);
@@ -868,14 +867,12 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
 
     const userDoc = userSnapshot.docs[0];
     const userData = userDoc.data() as AppUser;
-    const userId = userDoc.id;
+    const userId = userData.uid; // ここで正しいUIDを取得
 
     // 最新のログを取得して次のアクションを決定
     const allLogs = await getUserAttendanceLogsV2(userId, undefined, undefined, 1);
-    
     const latestLog = allLogs[0];
-      
-    const lastAction = latestLog ? latestLog.type : 'exit'; // ログがなければ出勤
+    const lastAction = latestLog ? latestLog.type : 'exit';
     const newLogType: 'entry' | 'exit' = lastAction === 'entry' ? 'exit' : 'entry';
     const newStatus = newLogType === 'entry' ? 'active' : 'inactive';
 
@@ -1008,7 +1005,7 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
     const dateKey = `${year}-${month}-${day}`;
     
     activeUsersSnapshot.docs.forEach(userDoc => {
-      const user = { uid: userDoc.id, ...userDoc.data() } as AppUser;
+      const user = userDoc.data() as AppUser;
       const logId = generateAttendanceLogId(user.uid);
       const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
       
