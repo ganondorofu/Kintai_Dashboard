@@ -9,7 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * 期生番号を日本語の学年表記に変換
  * @param grade 期生番号（数値）
- * @returns 日本語学年表記（例：「2年生 (9期生)」）
+ * @returns 日本語学年表記（例：「2年生」または「11期生」）
  */
 export function convertToJapaneseGrade(grade: number): string {
   const currentYear = new Date().getFullYear();
@@ -18,7 +18,7 @@ export function convertToJapaneseGrade(grade: number): string {
   const gradeFromKisei = (baseYear - grade) + 1 + (currentYear - baseYear);
   
   if (gradeFromKisei >= 1 && gradeFromKisei <= 3) {
-    return `${gradeFromKisei}年生 (${grade}期生)`;
+    return `${gradeFromKisei}年生`;
   }
   return `${grade}期生`;
 }
