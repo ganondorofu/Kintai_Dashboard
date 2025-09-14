@@ -191,6 +191,7 @@ const calculateDailyAttendanceFromLogsData = async (
     }, {} as Record<string, string>);
 
     const attendedUids = new Set<string>();
+    // その日に一度でも'entry'ログがあれば出席とみなす
     logs.forEach(log => {
         if (log.type === 'entry') {
             attendedUids.add(log.uid);
@@ -990,11 +991,11 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
   let noAction = 0;
 
   try {
-    const usersRef = collection(db, 'users');
+    const usersRef = collectionGroup(db, 'users');
     const q = query(usersRef, where('status', '==', 'active'));
     const activeUsersSnapshot = await getDocs(q);
     
-    const allUsersSnapshot = await getDocs(collection(db, 'users'));
+    const allUsersSnapshot = await getDocs(collectionGroup(db, 'users'));
     noAction = allUsersSnapshot.size - activeUsersSnapshot.size;
 
     if (activeUsersSnapshot.empty) {
@@ -1029,7 +1030,7 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
 
   } catch (error) {
     console.error("強制退勤処理エラー:", error);
-    failed = success > 0 ? success : (await getDocs(query(collection(db, 'users'), where('status', '==', 'active')))).size;
+    failed = success > 0 ? success : (await getDocs(query(collectionGroup(db, 'users'), where('status', '==', 'active')))).size;
     success = 0;
   }
   
