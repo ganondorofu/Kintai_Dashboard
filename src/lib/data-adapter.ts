@@ -117,7 +117,7 @@ const convertKiseiiToGrade = (kiseiNumber: number, currentYear: number = new Dat
 // 全ユーザー一覧を取得（管理者専用）
 export const getAllUsers = async (): Promise<AppUser[]> => {
   try {
-    const usersRef = collection(db, 'users');
+    const usersRef = collectionGroup(db, 'users');
     const snapshot = await getDocs(usersRef);
     const users = snapshot.docs.map(doc => ({
       uid: doc.id,
@@ -867,9 +867,8 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
 
     const userDoc = userSnapshot.docs[0];
     const userData = userDoc.data() as AppUser;
-    const userId = userData.uid; // ここで正しいUIDを取得
+    const userId = userData.uid;
 
-    // 最新のログを取得して次のアクションを決定
     const allLogs = await getUserAttendanceLogsV2(userId, undefined, undefined, 1);
     const latestLog = allLogs[0];
     const lastAction = latestLog ? latestLog.type : 'exit';
@@ -878,7 +877,6 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
 
     const batch = writeBatch(db);
 
-    // 新しい勤怠ログを attendances に作成
     const now = new Date();
     const { year, month, day } = getAttendancePath(now);
     const dateKey = `${year}-${month}-${day}`;
@@ -892,7 +890,6 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
       timestamp: serverTimestamp(),
     });
 
-    // userDoc.ref を使ってドキュメントの正確なパスを取得して更新
     batch.update(userDoc.ref, {
       status: newStatus,
       last_activity: serverTimestamp(),
@@ -982,7 +979,7 @@ export const watchTokenStatus = (token: string, callback: (status: string, data?
     });
 };
 
-export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, failed: number, noAction: number }> => {
+export const forceClockOutAllActiveUsers = async (): Promise<{ success: number; failed: number; noAction: number }> => {
   let success = 0;
   let failed = 0;
   let noAction = 0;
@@ -991,14 +988,15 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number, 
     const usersRef = collectionGroup(db, 'users');
     const q = query(usersRef, where('status', '==', 'active'));
     const activeUsersSnapshot = await getDocs(q);
-    
-    const allUsersSnapshot = await getDocs(collectionGroup(db, 'users'));
-    noAction = allUsersSnapshot.size - activeUsersSnapshot.size;
 
     if (activeUsersSnapshot.empty) {
+      const allUsersSnapshot = await getDocs(collectionGroup(db, 'users'));
+      noAction = allUsersSnapshot.size;
       return { success, failed, noAction };
     }
     
+    noAction = (await getDocs(collectionGroup(db, 'users'))).size - activeUsersSnapshot.size;
+
     const batch = writeBatch(db);
     const now = new Date();
     const { year, month, day } = getAttendancePath(now);
