@@ -869,33 +869,30 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     const userData = userDoc.data() as AppUser;
     const userId = userData.uid;
 
-    const allLogs = await getUserAttendanceLogsV2(userId, undefined, undefined, 1);
-    const latestLog = allLogs[0];
-    const lastAction = latestLog ? latestLog.type : 'exit';
-    const newLogType: 'entry' | 'exit' = lastAction === 'entry' ? 'exit' : 'entry';
-    const newStatus = newLogType === 'entry' ? 'active' : 'inactive';
-
-    const batch = writeBatch(db);
-
+    // ユーザーの最新ログを取得
+    const logsQuery = query(
+      collectionGroup(db, 'logs'),
+      where('uid', '==', userId),
+      orderBy('timestamp', 'desc'),
+      limit(1)
+    );
+    const logSnapshot = await getDocs(logsQuery);
+    const latestLog = logSnapshot.docs.length > 0 ? logSnapshot.docs[0].data() as AttendanceLog : null;
+    
+    const newLogType: 'entry' | 'exit' = !latestLog || latestLog.type === 'exit' ? 'entry' : 'exit';
+    
     const now = new Date();
     const { year, month, day } = getAttendancePath(now);
     const dateKey = `${year}-${month}-${day}`;
     const logId = generateAttendanceLogId(userId);
     const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
 
-    batch.set(newLogRef, {
+    await setDoc(newLogRef, {
       uid: userId,
       cardId: cardId,
       type: newLogType,
       timestamp: serverTimestamp(),
     });
-
-    batch.update(userDoc.ref, {
-      status: newStatus,
-      last_activity: serverTimestamp(),
-    });
-
-    await batch.commit();
 
     const userName = `${userData.lastname} ${userData.firstname}`;
     const actionMsg = newLogType === 'entry' ? '出勤を記録しました' : '退勤を記録しました';
@@ -980,30 +977,46 @@ export const watchTokenStatus = (token: string, callback: (status: string, data?
 };
 
 export const forceClockOutAllActiveUsers = async (): Promise<{ success: number; failed: number; noAction: number }> => {
-  let success = 0;
-  let failed = 0;
-  let noAction = 0;
+  let successCount = 0;
+  let noActionCount = 0;
+  const now = new Date();
 
   try {
-    const usersRef = collectionGroup(db, 'users');
-    const q = query(usersRef, where('status', '==', 'active'));
-    const activeUsersSnapshot = await getDocs(q);
-
-    if (activeUsersSnapshot.empty) {
-      const allUsersSnapshot = await getDocs(collectionGroup(db, 'users'));
-      noAction = allUsersSnapshot.size;
-      return { success, failed, noAction };
+    const allUsers = await getAllUsers();
+    if (allUsers.length === 0) {
+      return { success: 0, failed: 0, noAction: 0 };
     }
-    
-    noAction = (await getDocs(collectionGroup(db, 'users'))).size - activeUsersSnapshot.size;
 
     const batch = writeBatch(db);
-    const now = new Date();
     const { year, month, day } = getAttendancePath(now);
     const dateKey = `${year}-${month}-${day}`;
+
+    // 各ユーザーの最新ログを一度に取得
+    const latestLogsPromises = allUsers.map(user => 
+      getDocs(query(collectionGroup(db, 'logs'), where('uid', '==', user.uid), orderBy('timestamp', 'desc'), limit(1)))
+    );
+    const latestLogsSnapshots = await Promise.all(latestLogsPromises);
+
+    const usersToClockOut: AppUser[] = [];
+    latestLogsSnapshots.forEach((snapshot, index) => {
+      const user = allUsers[index];
+      if (snapshot.empty) {
+        noActionCount++;
+      } else {
+        const latestLog = snapshot.docs[0].data() as AttendanceLog;
+        if (latestLog.type === 'entry') {
+          usersToClockOut.push(user);
+        } else {
+          noActionCount++;
+        }
+      }
+    });
     
-    activeUsersSnapshot.docs.forEach(userDoc => {
-      const user = userDoc.data() as AppUser;
+    if (usersToClockOut.length === 0) {
+      return { success: 0, failed: 0, noAction: allUsers.length };
+    }
+
+    usersToClockOut.forEach(user => {
       const logId = generateAttendanceLogId(user.uid);
       const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
       
@@ -1013,23 +1026,19 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number; 
         timestamp: serverTimestamp(),
         cardId: 'force_checkout'
       });
-      
-      batch.update(userDoc.ref, {
-        status: 'inactive',
-        last_activity: serverTimestamp()
-      });
-      success++;
+      successCount++;
     });
 
     await batch.commit();
 
+    return { success: successCount, failed: 0, noAction: noActionCount };
+
   } catch (error) {
     console.error("強制退勤処理エラー:", error);
-    failed = success > 0 ? success : (await getDocs(query(collectionGroup(db, 'users'), where('status', '==', 'active')))).size;
-    success = 0;
+    // エラー発生時は、処理しようとした全員を失敗カウントとする
+    const allUsers = await getAllUsers();
+    return { success: 0, failed: allUsers.length - noActionCount, noAction: noActionCount };
   }
-  
-  return { success, failed, noAction };
 };
 
 
@@ -1066,96 +1075,84 @@ export const updateForceClockOutSettings = async (startTime: string, endTime: st
 // ------------------------------------------------
 
 /** @deprecated */
-export const calculateMonthlyAttendanceStats = async (
+export const calculateMonthlyAttendanceStatsWithCache = async (
   year: number,
   month: number
 ): Promise<Record<string, { totalCount: number; teamStats: any[] }>> => {
   try {
-    const monthStart = new Date(year, month, 1);
-    const monthEnd = new Date(year, month + 1, 0); 
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0); 
+    const allLogs = await getAllAttendanceLogs(startDate, endDate);
     
-    const allLogs = await getAllAttendanceLogs(monthStart, monthEnd);
-    
-    const allUsers = await getAllUsers();
-    const allTeams = await getAllTeams();
-    const teamMap = allTeams.reduce((acc, team) => {
-      acc[team.id] = team.name;
-      return acc;
-    }, {} as Record<string, string>);
-    
-    const dailyStats: Record<string, { totalCount: number; teamStats: any[] }> = {};
-    
-    for (let day = 1; day <= monthEnd.getDate(); day++) {
-      const targetDate = new Date(year, month, day);
-      const dateKey = targetDate.toDateString();
-      
-      const startOfDay = new Date(targetDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      
-      const endOfDay = new Date(targetDate);
-      endOfDay.setHours(23, 59, 59, 999);
-      
-      const dayLogs = allLogs.filter(log => {
-        const logDate = safeTimestampToDate(log.timestamp);
-        if (!logDate) return false;
-        
-        return logDate >= startOfDay && logDate <= endOfDay;
-      });
-      
-      const attendedUids = [...new Set(dayLogs.map(log => log.uid))];
-      
-      if (attendedUids.length === 0) {
-        dailyStats[dateKey] = { totalCount: 0, teamStats: [] };
-        continue;
-      }
-      
-      const attendedUsers = allUsers.filter(user => attendedUids.includes(user.uid));
-      
-      const teamGroups = attendedUsers.reduce((acc, user) => {
-        const teamId = user.teamId || 'unassigned';
-        if (!acc[teamId]) {
-          acc[teamId] = [];
-        }
-        acc[teamId].push(user);
-        return acc;
-      }, {} as Record<string, AppUser[]>);
-      
-      const teamStats = Object.entries(teamGroups).map(([teamId, teamUsers]) => {
-        const gradeGroups = teamUsers.reduce((acc, user) => {
-          const kiseiNumber = user.grade || 10;
-          const actualGrade = convertKiseiiToGrade(kiseiNumber);
-          
-          if (!acc[actualGrade]) {
-            acc[actualGrade] = [];
-          }
-          acc[actualGrade].push(user);
-          return acc;
-        }, {} as Record<number, AppUser[]>);
-
-        const gradeStats = Object.entries(gradeGroups).map(([grade, gradeUsers]) => ({
-          grade: parseInt(grade),
-          kisei: gradeUsers[0]?.grade || 10,
-          count: gradeUsers.length,
-          users: gradeUsers
-        })).sort((a, b) => a.grade - b.grade);
-
-        return {
-          teamId,
-          teamName: teamMap[teamId] || `班${teamId}`,
-          gradeStats
-        };
-      });
-      
-      const totalCount = teamStats.reduce((total, team) => 
-        total + team.gradeStats.reduce((teamTotal, grade) => teamTotal + grade.count, 0), 0
-      );
-      
-      dailyStats[dateKey] = { totalCount, teamStats };
+    if (allLogs.length === 0) {
+      return {};
     }
     
-    return dailyStats;
+    const allUsers = await getAllUsers();
+    const currentDataHash = generateDataHash(allLogs, allUsers);
+    const existingCache = await getMonthlyCache(year, month);
+    
+    const isCacheValid = existingCache && 
+      existingCache.dataHash === currentDataHash &&
+      existingCache.lastLogCount === allLogs.length;
+    
+    if (isCacheValid) {
+      const result: Record<string, { totalCount: number; teamStats: any[] }> = {};
+      Object.entries(existingCache.dailyStats).forEach(([dateKey, stats]) => {
+        result[dateKey] = {
+          totalCount: stats.totalCount,
+          teamStats: stats.teamStats
+        };
+      });
+      return result;
+    }
+    
+    const result: Record<string, { totalCount: number; teamStats: any[] }> = {};
+    
+    for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+      const dateKey = date.toDateString();
+      const teamStats = await getDailyAttendanceStatsV2(date);
+      const totalCount = teamStats.reduce((sum, team) => 
+        sum + team.gradeStats.reduce((teamSum, grade) => teamSum + grade.count, 0), 0
+      );
+      result[dateKey] = { totalCount, teamStats };
+    }
+    
+    const cacheData: MonthlyAttendanceCache = {
+      year,
+      month,
+      dailyStats: {},
+      lastCalculated: serverTimestamp() as Timestamp,
+      lastLogCount: allLogs.length,
+      dataHash: currentDataHash
+    };
+    
+    Object.entries(result).forEach(([dateKey, stats]) => {
+      const date = new Date(dateKey);
+      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      
+      cacheData.dailyStats[dateKey] = {
+        date: dateStr,
+        totalCount: stats.totalCount,
+        teamStats: stats.teamStats.map((team: any) => ({
+          teamId: team.teamId,
+          teamName: team.teamName || '',
+          gradeStats: team.gradeStats.map((grade: any) => ({
+            grade: grade.grade,
+            count: grade.count,
+            userIds: grade.users.map((user: any) => user.uid)
+          }))
+        }))
+      };
+    });
+    
+    saveMonthlyCache(cacheData).catch(error => 
+      console.error('キャッシュ保存エラー:', error)
+    );
+    
+    return result;
   } catch (error) {
-    console.error('月次出席統計計算エラー:', error);
+    console.error('新しい月次統計計算エラー:', error);
     return {};
   }
 };
