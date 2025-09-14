@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
-import { getDailyAttendanceStatsV2, getTeamMembers } from '@/lib/data-adapter';
+import { getLatestLogForEachUser } from '@/lib/data-adapter';
 import type { AppUser } from '@/types';
 
 
@@ -54,53 +54,44 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
   // 班データの構築
   useEffect(() => {
     const buildTeamData = async () => {
+      if (allUsersFromContext.length === 0 || allTeams.length === 0) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
+
       try {
-        const todayStats = await getDailyAttendanceStatsV2(new Date());
-        
+        const allUserUids = allUsersFromContext.map(u => u.uid);
+        const latestLogsMap = await getLatestLogForEachUser(allUserUids);
+
         const presentUids = new Set<string>();
-        todayStats.forEach(team => {
-            team.gradeStats.forEach(grade => {
-                grade.users.forEach(user => {
-                    if (user.isPresent) {
-                        presentUids.add(user.uid);
-                    }
-                });
-            });
+        latestLogsMap.forEach((log, uid) => {
+          if (log.type === 'entry') {
+            presentUids.add(uid);
+          }
         });
 
-        const teamMap = new Map<string, AppUser[]>();
-        allUsersFromContext.forEach(user => {
-            if (user.teamId) {
-                if (!teamMap.has(user.teamId)) {
-                    teamMap.set(user.teamId, []);
-                }
-                teamMap.get(user.teamId)!.push(user);
-            }
+        const teamData = allTeams.map(team => {
+          const members = allUsersFromContext.filter(u => u.teamId === team.id);
+          const presentMembersCount = members.filter(m => presentUids.has(m.uid)).length;
+
+          return {
+            teamId: team.id,
+            teamName: team.name,
+            members: members.map(m => ({
+              uid: m.uid,
+              firstname: m.firstname,
+              lastname: m.lastname,
+              github: m.github,
+              isPresent: presentUids.has(m.uid),
+            })).sort((a, b) => a.lastname.localeCompare(b.lastname, 'ja')),
+            presentCount: presentMembersCount,
+            totalCount: members.length,
+          };
         });
 
-        const teamDataPromises = allTeams.map(async (team) => {
-            const members = teamMap.get(team.id) || [];
-            const presentMembers = members.filter(m => presentUids.has(m.uid));
-            
-            return {
-                teamId: team.id,
-                teamName: team.name,
-                members: members.map(m => ({
-                    uid: m.uid,
-                    firstname: m.firstname,
-                    lastname: m.lastname,
-                    github: m.github,
-                    isPresent: presentUids.has(m.uid)
-                })).sort((a, b) => a.lastname.localeCompare(b.lastname, 'ja')),
-                presentCount: presentMembers.length,
-                totalCount: members.length,
-            };
-        });
-
-        const resolvedTeams = await Promise.all(teamDataPromises);
-        const sortedTeams = resolvedTeams
-          .filter(team => team.totalCount > 0) // メンバーがいない班は表示しない
+        const sortedTeams = teamData
+          .filter(team => team.totalCount > 0)
           .sort((a, b) => a.teamName.localeCompare(b.teamName, 'ja'));
         
         setTeams(sortedTeams);
@@ -111,10 +102,8 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
       }
     };
 
-    if (allTeams.length > 0 && allUsersFromContext.length > 0) {
-      buildTeamData();
-    }
-  }, [allTeams, allUsersFromContext]);
+    buildTeamData();
+  }, [allUsersFromContext, allTeams]);
 
   const handleTeamClick = (teamId: string) => {
     if (isAdmin) {

@@ -864,12 +864,11 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     if (userSnapshot.empty) {
       return { status: 'unregistered', message: '未登録のカードです', subMessage: '登録するには「/」キーを押してください' };
     }
-
+    
     const userDoc = userSnapshot.docs[0];
-    const userData = userDoc.data() as AppUser;
+    const userData = { uid: userDoc.id, ...userDoc.data() } as AppUser;
     const userId = userData.uid;
 
-    // ユーザーの最新ログを取得
     const logsQuery = query(
       collectionGroup(db, 'logs'),
       where('uid', '==', userId),
@@ -887,12 +886,20 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
     const logId = generateAttendanceLogId(userId);
     const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
 
-    await setDoc(newLogRef, {
+    const batch = writeBatch(db);
+    batch.set(newLogRef, {
       uid: userId,
       cardId: cardId,
       type: newLogType,
       timestamp: serverTimestamp(),
     });
+
+    batch.update(userDoc.ref, {
+      status: newLogType === 'entry' ? 'active' : 'inactive',
+      last_activity: serverTimestamp(),
+    });
+
+    await batch.commit();
 
     const userName = `${userData.lastname} ${userData.firstname}`;
     const actionMsg = newLogType === 'entry' ? '出勤を記録しました' : '退勤を記録しました';
@@ -977,46 +984,29 @@ export const watchTokenStatus = (token: string, callback: (status: string, data?
 };
 
 export const forceClockOutAllActiveUsers = async (): Promise<{ success: number; failed: number; noAction: number }> => {
+  const allUsers = await getAllUsers();
+  const batch = writeBatch(db);
   let successCount = 0;
   let noActionCount = 0;
+  
   const now = new Date();
+  const { year, month, day } = getAttendancePath(now);
+  const dateKey = `${year}-${month}-${day}`;
 
-  try {
-    const allUsers = await getAllUsers();
-    if (allUsers.length === 0) {
-      return { success: 0, failed: 0, noAction: 0 };
+  const latestLogsPromises = allUsers.map(user => 
+    getDocs(query(collectionGroup(db, 'logs'), where('uid', '==', user.uid), orderBy('timestamp', 'desc'), limit(1)))
+  );
+  const latestLogsSnapshots = await Promise.all(latestLogsPromises);
+
+  latestLogsSnapshots.forEach((snapshot, index) => {
+    const user = allUsers[index];
+    if (snapshot.empty) {
+      noActionCount++;
+      return;
     }
 
-    const batch = writeBatch(db);
-    const { year, month, day } = getAttendancePath(now);
-    const dateKey = `${year}-${month}-${day}`;
-
-    // 各ユーザーの最新ログを一度に取得
-    const latestLogsPromises = allUsers.map(user => 
-      getDocs(query(collectionGroup(db, 'logs'), where('uid', '==', user.uid), orderBy('timestamp', 'desc'), limit(1)))
-    );
-    const latestLogsSnapshots = await Promise.all(latestLogsPromises);
-
-    const usersToClockOut: AppUser[] = [];
-    latestLogsSnapshots.forEach((snapshot, index) => {
-      const user = allUsers[index];
-      if (snapshot.empty) {
-        noActionCount++;
-      } else {
-        const latestLog = snapshot.docs[0].data() as AttendanceLog;
-        if (latestLog.type === 'entry') {
-          usersToClockOut.push(user);
-        } else {
-          noActionCount++;
-        }
-      }
-    });
-    
-    if (usersToClockOut.length === 0) {
-      return { success: 0, failed: 0, noAction: allUsers.length };
-    }
-
-    usersToClockOut.forEach(user => {
+    const latestLog = snapshot.docs[0].data() as AttendanceLog;
+    if (latestLog.type === 'entry') {
       const logId = generateAttendanceLogId(user.uid);
       const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
       
@@ -1027,18 +1017,41 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number; 
         cardId: 'force_checkout'
       });
       successCount++;
-    });
+    } else {
+      noActionCount++;
+    }
+  });
 
+  if (successCount > 0) {
     await batch.commit();
-
-    return { success: successCount, failed: 0, noAction: noActionCount };
-
-  } catch (error) {
-    console.error("強制退勤処理エラー:", error);
-    // エラー発生時は、処理しようとした全員を失敗カウントとする
-    const allUsers = await getAllUsers();
-    return { success: 0, failed: allUsers.length - noActionCount, noAction: noActionCount };
   }
+
+  return { success: successCount, failed: 0, noAction: noActionCount };
+};
+
+export const getLatestLogForEachUser = async (uids: string[]): Promise<Map<string, AttendanceLog>> => {
+  const latestLogs = new Map<string, AttendanceLog>();
+  
+  if (uids.length === 0) {
+    return latestLogs;
+  }
+  
+  const logsQuery = query(
+    collectionGroup(db, 'logs'),
+    where('uid', 'in', uids)
+  );
+
+  const snapshot = await getDocs(logsQuery);
+  snapshot.docs.forEach(doc => {
+    const log = { id: doc.id, ...doc.data() } as AttendanceLog;
+    const existing = latestLogs.get(log.uid);
+    
+    if (!existing || (safeTimestampToDate(log.timestamp)?.getTime() || 0) > (safeTimestampToDate(existing.timestamp)?.getTime() || 0)) {
+      latestLogs.set(log.uid, log);
+    }
+  });
+
+  return latestLogs;
 };
 
 
@@ -1070,90 +1083,3 @@ export const updateForceClockOutSettings = async (startTime: string, endTime: st
   }
 };
 
-// ------------------------------------------------
-// -- DEPRECATED (but used by legacy components) --
-// ------------------------------------------------
-
-/** @deprecated */
-export const calculateMonthlyAttendanceStatsWithCache = async (
-  year: number,
-  month: number
-): Promise<Record<string, { totalCount: number; teamStats: any[] }>> => {
-  try {
-    const startDate = new Date(year, month, 1);
-    const endDate = new Date(year, month + 1, 0); 
-    const allLogs = await getAllAttendanceLogs(startDate, endDate);
-    
-    if (allLogs.length === 0) {
-      return {};
-    }
-    
-    const allUsers = await getAllUsers();
-    const currentDataHash = generateDataHash(allLogs, allUsers);
-    const existingCache = await getMonthlyCache(year, month);
-    
-    const isCacheValid = existingCache && 
-      existingCache.dataHash === currentDataHash &&
-      existingCache.lastLogCount === allLogs.length;
-    
-    if (isCacheValid) {
-      const result: Record<string, { totalCount: number; teamStats: any[] }> = {};
-      Object.entries(existingCache.dailyStats).forEach(([dateKey, stats]) => {
-        result[dateKey] = {
-          totalCount: stats.totalCount,
-          teamStats: stats.teamStats
-        };
-      });
-      return result;
-    }
-    
-    const result: Record<string, { totalCount: number; teamStats: any[] }> = {};
-    
-    for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-      const dateKey = date.toDateString();
-      const teamStats = await getDailyAttendanceStatsV2(date);
-      const totalCount = teamStats.reduce((sum, team) => 
-        sum + team.gradeStats.reduce((teamSum, grade) => teamSum + grade.count, 0), 0
-      );
-      result[dateKey] = { totalCount, teamStats };
-    }
-    
-    const cacheData: MonthlyAttendanceCache = {
-      year,
-      month,
-      dailyStats: {},
-      lastCalculated: serverTimestamp() as Timestamp,
-      lastLogCount: allLogs.length,
-      dataHash: currentDataHash
-    };
-    
-    Object.entries(result).forEach(([dateKey, stats]) => {
-      const date = new Date(dateKey);
-      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      
-      cacheData.dailyStats[dateKey] = {
-        date: dateStr,
-        totalCount: stats.totalCount,
-        teamStats: stats.teamStats.map((team: any) => ({
-          teamId: team.teamId,
-          teamName: team.teamName || '',
-          gradeStats: team.gradeStats.map((grade: any) => ({
-            grade: grade.grade,
-            count: grade.count,
-            userIds: grade.users.map((user: any) => user.uid)
-          }))
-        }))
-      };
-    });
-    
-    saveMonthlyCache(cacheData).catch(error => 
-      console.error('キャッシュ保存エラー:', error)
-    );
-    
-    return result;
-  } catch (error) {
-    console.error('新しい月次統計計算エラー:', error);
-    return {};
-  }
-};
-    
