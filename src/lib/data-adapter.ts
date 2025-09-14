@@ -177,21 +177,19 @@ export const getAllTeams = async (): Promise<Team[]> => {
 
 const calculateDailyAttendanceFromLogsData = async (
   logs: AttendanceLog[],
-  targetDate: Date
+  allUsers: AppUser[]
 ): Promise<{
   teamId: string;
   teamName?: string;
   gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
 }[]> => {
   try {
-    const allUsers = await getAllUsers(); // ユーザーのステータス込みで取得
     const teams = await getAllTeams();
     const teamMap = teams.reduce((acc, team) => {
       acc[team.id] = team.name;
       return acc;
     }, {} as Record<string, string>);
 
-    // 今日のログから最新のログを取得して出勤者を特定
     const latestLogs = new Map<string, AttendanceLog>();
     logs.forEach(log => {
       const existing = latestLogs.get(log.uid);
@@ -205,14 +203,13 @@ const calculateDailyAttendanceFromLogsData = async (
         attendedUids.add(uid);
       }
     });
-    
+
     const teamGroups = allUsers.reduce((acc, user) => {
-      if (user.teamId) {
-        if (!acc[user.teamId]) {
-          acc[user.teamId] = [];
-        }
-        acc[user.teamId].push(user);
+      const teamId = user.teamId || 'unassigned';
+      if (!acc[teamId]) {
+        acc[teamId] = [];
       }
+      acc[teamId].push(user);
       return acc;
     }, {} as Record<string, AppUser[]>);
 
@@ -227,12 +224,12 @@ const calculateDailyAttendanceFromLogsData = async (
       }, {} as Record<string, AppUser[]>);
 
       const gradeStats = Object.entries(gradeGroups).map(([gradeStr, gradeUsers]) => {
-          const gradePresentUsers = gradeUsers.filter(u => attendedUids.has(u.uid));
-          return {
-            grade: parseInt(gradeStr),
-            count: gradePresentUsers.length,
-            users: gradeUsers.map(u => ({ ...u, isPresent: attendedUids.has(u.uid) }))
-          }
+        const presentUsers = gradeUsers.filter(u => attendedUids.has(u.uid));
+        return {
+          grade: parseInt(gradeStr),
+          count: presentUsers.length,
+          users: gradeUsers.map(u => ({ ...u, isPresent: attendedUids.has(u.uid) }))
+        };
       }).sort((a, b) => b.grade - a.grade);
 
       return {
@@ -517,166 +514,27 @@ export const getAllAttendanceLogs = async (
   }
 };
 
-const calculateDailyAttendanceFromLogs = async (
-  targetDate: Date
-): Promise<{
-  teamId: string;
-  teamName?: string;
-  gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
-}[]> => {
-  try {
-    const { year, month, day } = getAttendancePath(targetDate);
-    
-    const dateKey = `${year}-${month}-${day}`;
-    const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
-    const snapshot = await getDocs(dayLogsRef);
-    
-    if (snapshot.empty) {
-        return [];
-    }
-    
-    const logs: AttendanceLog[] = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as AttendanceLog));
-    
-    return await calculateDailyAttendanceFromLogsData(logs, targetDate);
-
-  } catch (error) {
-    console.error('ログデータからの統計計算エラー:', error);
-    return [];
-  }
-};
-
-
-export const calculateMonthlyAttendanceStats = async (
-  year: number,
-  month: number
-): Promise<Record<string, { totalCount: number; teamStats: any[] }>> => {
-  try {
-    const monthStart = new Date(year, month, 1);
-    const monthEnd = new Date(year, month + 1, 0); 
-    
-    const allLogs = await getAllAttendanceLogs(monthStart, monthEnd);
-    
-    const allUsers = await getAllUsers();
-    const allTeams = await getAllTeams();
-    const teamMap = allTeams.reduce((acc, team) => {
-      acc[team.id] = team.name;
-      return acc;
-    }, {} as Record<string, string>);
-    
-    const dailyStats: Record<string, { totalCount: number; teamStats: any[] }> = {};
-    
-    for (let day = 1; day <= monthEnd.getDate(); day++) {
-      const targetDate = new Date(year, month, day);
-      const dateKey = targetDate.toDateString();
-      
-      const startOfDay = new Date(targetDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      
-      const endOfDay = new Date(targetDate);
-      endOfDay.setHours(23, 59, 59, 999);
-      
-      const dayLogs = allLogs.filter(log => {
-        const logDate = safeTimestampToDate(log.timestamp);
-        if (!logDate) return false;
-        
-        return logDate >= startOfDay && logDate <= endOfDay;
-      });
-      
-      const attendedUids = [...new Set(dayLogs.map(log => log.uid))];
-      
-      if (attendedUids.length === 0) {
-        dailyStats[dateKey] = { totalCount: 0, teamStats: [] };
-        continue;
-      }
-      
-      const attendedUsers = allUsers.filter(user => attendedUids.includes(user.uid));
-      
-      const teamGroups = attendedUsers.reduce((acc, user) => {
-        const teamId = user.teamId || 'unassigned';
-        if (!acc[teamId]) {
-          acc[teamId] = [];
-        }
-        acc[teamId].push(user);
-        return acc;
-      }, {} as Record<string, AppUser[]>);
-      
-      const teamStats = Object.entries(teamGroups).map(([teamId, teamUsers]) => {
-        const gradeGroups = teamUsers.reduce((acc, user) => {
-          const kiseiNumber = user.grade || 10;
-          const actualGrade = convertKiseiiToGrade(kiseiNumber);
-          
-          if (!acc[actualGrade]) {
-            acc[actualGrade] = [];
-          }
-          acc[actualGrade].push(user);
-          return acc;
-        }, {} as Record<number, AppUser[]>);
-
-        const gradeStats = Object.entries(gradeGroups).map(([grade, gradeUsers]) => ({
-          grade: parseInt(grade),
-          kisei: gradeUsers[0]?.grade || 10,
-          count: gradeUsers.length,
-          users: gradeUsers
-        })).sort((a, b) => a.grade - b.grade);
-
-        return {
-          teamId,
-          teamName: teamMap[teamId] || `班${teamId}`,
-          gradeStats
-        };
-      });
-      
-      const totalCount = teamStats.reduce((total, team) => 
-        total + team.gradeStats.reduce((teamTotal, grade) => teamTotal + grade.count, 0), 0
-      );
-      
-      dailyStats[dateKey] = { totalCount, teamStats };
-    }
-    
-    return dailyStats;
-  } catch (error) {
-    console.error('月次出席統計計算エラー:', error);
-    return {};
-  }
-};
-
-export const getDailyAttendanceStats = async (
-  targetDate: Date
-): Promise<{
-  teamId: string;
-  teamName?: string;
-  gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
-}[]> => {
-  return calculateDailyAttendanceFromLogs(targetDate);
-};
-
 export const getDailyAttendanceStatsV2 = async (
   targetDate: Date
 ): Promise<{
   teamId: string;
   teamName?: string;
-  gradeStats: { grade: number; count: number; users: (AppUser & {isPresent: boolean})[] }[];
+  gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
 }[]> => {
   try {
-    const { year, month, day } = getAttendancePath(targetDate);
+    const allUsers = await getAllUsers();
     
+    const { year, month, day } = getAttendancePath(targetDate);
     const dateKey = `${year}-${month}-${day}`;
     const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
     const snapshot = await getDocs(dayLogsRef);
-    
-    if (snapshot.empty) {
-        return [];
-    }
-    
+
     const logs: AttendanceLog[] = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as AttendanceLog));
     
-    return await calculateDailyAttendanceFromLogsData(logs, targetDate);
+    return await calculateDailyAttendanceFromLogsData(logs, allUsers);
   } catch (error) {
     console.error('新しい日別統計取得エラー:', error);
     return [];
@@ -898,73 +756,6 @@ export const calculateMonthlyAttendanceStatsWithCacheV2 = async (
   } catch (error) {
     console.error('新しい月次統計計算エラー:', error);
     return {};
-  }
-};
-
-export const calculateMonthlyAttendanceStatsWithCache = async (
-  year: number,
-  month: number
-): Promise<Record<string, { totalCount: number; teamStats: any[] }>> => {
-  try {
-    const [allLogs, allUsers] = await Promise.all([
-      getAllAttendanceLogs(),
-      getAllUsers()
-    ]);
-    
-    const currentDataHash = generateDataHash(allLogs, allUsers);
-    const existingCache = await getMonthlyCache(year, month);
-    
-    const isCacheValid = existingCache && 
-      existingCache.dataHash === currentDataHash &&
-      existingCache.lastLogCount === allLogs.length;
-    
-    if (isCacheValid) {
-      const result: Record<string, { totalCount: number; teamStats: any[] }> = {};
-      Object.entries(existingCache.dailyStats).forEach(([dateKey, stats]) => {
-        result[dateKey] = {
-          totalCount: stats.totalCount,
-          teamStats: stats.teamStats
-        };
-      });
-      return result;
-    }
-    
-    const freshStats = await calculateMonthlyAttendanceStats(year, month);
-    
-    const cacheData: MonthlyAttendanceCache = {
-      year,
-      month,
-      dailyStats: {},
-      lastCalculated: serverTimestamp() as Timestamp,
-      lastLogCount: allLogs.length,
-      dataHash: currentDataHash
-    };
-    
-    Object.entries(freshStats).forEach(([dateKey, stats]) => {
-      cacheData.dailyStats[dateKey] = {
-        date: dateKey,
-        totalCount: stats.totalCount,
-        teamStats: stats.teamStats.map(team => ({
-          teamId: team.teamId,
-          teamName: team.teamName || `班${team.teamId}`,
-          gradeStats: team.gradeStats.map((grade: any) => ({
-            grade: grade.grade,
-            count: grade.count,
-            userIds: grade.users.map((user: any) => user.uid)
-          }))
-        }))
-      };
-    });
-    
-    saveMonthlyCache(cacheData).catch(error => 
-      console.error('キャッシュ保存に失敗しましたが、処理は続行します:', error)
-    );
-    
-    return freshStats;
-    
-  } catch (error) {
-    console.error('キャッシュ機能付き月次統計計算エラー:', error);
-    return await calculateMonthlyAttendanceStats(year, month);
   }
 };
 
@@ -1373,3 +1164,148 @@ export const updateForceClockOutSettings = async (startTime: string, endTime: st
     throw error;
   }
 };
+
+// ------------------------------------------------
+// -- DEPRECATED (but used by legacy components) --
+// ------------------------------------------------
+
+/** @deprecated */
+const calculateDailyAttendanceFromLogs = async (
+  targetDate: Date
+): Promise<{
+  teamId: string;
+  teamName?: string;
+  gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
+}[]> => {
+  try {
+    const allUsers = await getAllUsers();
+    
+    const { year, month, day } = getAttendancePath(targetDate);
+    const dateKey = `${year}-${month}-${day}`;
+    const dayLogsRef = collection(db, 'attendances', dateKey, 'logs');
+    const snapshot = await getDocs(dayLogsRef);
+    
+    if (snapshot.empty) {
+        return [];
+    }
+    
+    const logs: AttendanceLog[] = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as AttendanceLog));
+    
+    return await calculateDailyAttendanceFromLogsData(logs, allUsers);
+
+  } catch (error) {
+    console.error('ログデータからの統計計算エラー:', error);
+    return [];
+  }
+};
+
+/** @deprecated */
+export const getDailyAttendanceStats = async (
+  targetDate: Date
+): Promise<{
+  teamId: string;
+  teamName?: string;
+  gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
+}[]> => {
+  return calculateDailyAttendanceFromLogs(targetDate);
+};
+
+
+/** @deprecated */
+export const calculateMonthlyAttendanceStats = async (
+  year: number,
+  month: number
+): Promise<Record<string, { totalCount: number; teamStats: any[] }>> => {
+  try {
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0); 
+    
+    const allLogs = await getAllAttendanceLogs(monthStart, monthEnd);
+    
+    const allUsers = await getAllUsers();
+    const allTeams = await getAllTeams();
+    const teamMap = allTeams.reduce((acc, team) => {
+      acc[team.id] = team.name;
+      return acc;
+    }, {} as Record<string, string>);
+    
+    const dailyStats: Record<string, { totalCount: number; teamStats: any[] }> = {};
+    
+    for (let day = 1; day <= monthEnd.getDate(); day++) {
+      const targetDate = new Date(year, month, day);
+      const dateKey = targetDate.toDateString();
+      
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const dayLogs = allLogs.filter(log => {
+        const logDate = safeTimestampToDate(log.timestamp);
+        if (!logDate) return false;
+        
+        return logDate >= startOfDay && logDate <= endOfDay;
+      });
+      
+      const attendedUids = [...new Set(dayLogs.map(log => log.uid))];
+      
+      if (attendedUids.length === 0) {
+        dailyStats[dateKey] = { totalCount: 0, teamStats: [] };
+        continue;
+      }
+      
+      const attendedUsers = allUsers.filter(user => attendedUids.includes(user.uid));
+      
+      const teamGroups = attendedUsers.reduce((acc, user) => {
+        const teamId = user.teamId || 'unassigned';
+        if (!acc[teamId]) {
+          acc[teamId] = [];
+        }
+        acc[teamId].push(user);
+        return acc;
+      }, {} as Record<string, AppUser[]>);
+      
+      const teamStats = Object.entries(teamGroups).map(([teamId, teamUsers]) => {
+        const gradeGroups = teamUsers.reduce((acc, user) => {
+          const kiseiNumber = user.grade || 10;
+          const actualGrade = convertKiseiiToGrade(kiseiNumber);
+          
+          if (!acc[actualGrade]) {
+            acc[actualGrade] = [];
+          }
+          acc[actualGrade].push(user);
+          return acc;
+        }, {} as Record<number, AppUser[]>);
+
+        const gradeStats = Object.entries(gradeGroups).map(([grade, gradeUsers]) => ({
+          grade: parseInt(grade),
+          kisei: gradeUsers[0]?.grade || 10,
+          count: gradeUsers.length,
+          users: gradeUsers
+        })).sort((a, b) => a.grade - b.grade);
+
+        return {
+          teamId,
+          teamName: teamMap[teamId] || `班${teamId}`,
+          gradeStats
+        };
+      });
+      
+      const totalCount = teamStats.reduce((total, team) => 
+        total + team.gradeStats.reduce((teamTotal, grade) => teamTotal + grade.count, 0), 0
+      );
+      
+      dailyStats[dateKey] = { totalCount, teamStats };
+    }
+    
+    return dailyStats;
+  } catch (error) {
+    console.error('月次出席統計計算エラー:', error);
+    return {};
+  }
+};
+    
