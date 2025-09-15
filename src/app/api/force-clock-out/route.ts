@@ -1,15 +1,17 @@
 
 import { NextResponse } from 'next/server';
-import { forceClockOutAllActiveUsers, getForceClockOutSettings } from '@/lib/data-adapter';
+import { forceClockOutAllActiveUsers, getForceClockOutSettings, createApiCallLog, updateApiCallLog } from '@/lib/data-adapter';
 import { toZonedTime, format } from 'date-fns-tz';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const logId = await createApiCallLog('/api/force-clock-out', { status: 'running' });
+
   try {
     const settings = await getForceClockOutSettings();
-    const startTime = settings?.forceClockOutStartTime || '23:55'; // デフォルト23:55
-    const endTime = settings?.forceClockOutEndTime || '23:59';   // デフォルト23:59
+    const startTime = settings?.forceClockOutStartTime || '23:55';
+    const endTime = settings?.forceClockOutEndTime || '23:59';
 
     const now = new Date();
     const jstNow = toZonedTime(now, 'Asia/Tokyo');
@@ -25,30 +27,37 @@ export async function GET() {
 
     let isInRange = false;
     if (startTimeInMinutes <= endTimeInMinutes) {
-      // 日をまたがない場合 (例: 09:00 - 17:00)
       isInRange = currentTimeInMinutes >= startTimeInMinutes && currentTimeInMinutes <= endTimeInMinutes;
     } else {
-      // 日をまたぐ場合 (例: 23:00 - 02:00)
       isInRange = currentTimeInMinutes >= startTimeInMinutes || currentTimeInMinutes <= endTimeInMinutes;
     }
     
     if (!isInRange) {
-      console.log(`[/api/force-clock-out] Not in active time range. Current: ${currentTime}, Range: ${startTime}-${endTime}. Skipping.`);
-      return NextResponse.json({
-        message: 'Not in active time range. Skipping.',
-      });
+      const message = `Not in active time range. Current: ${currentTime}, Range: ${startTime}-${endTime}. Skipping.`;
+      console.log(`[/api/force-clock-out] ${message}`);
+      await updateApiCallLog(logId, { status: 'skipped', result: { message } });
+      return NextResponse.json({ message });
     }
 
-    console.log(`[/api/force-clock-out] Received request in active time range. Current: ${currentTime}, Range: ${startTime}-${endTime}. Starting force clock out process...`);
+    const startMessage = `Received request in active time range. Current: ${currentTime}, Range: ${startTime}-${endTime}. Starting force clock out process...`;
+    console.log(`[/api/force-clock-out] ${startMessage}`);
+    await updateApiCallLog(logId, { result: { message: startMessage } });
+
     const result = await forceClockOutAllActiveUsers();
     console.log('[/api/force-clock-out] Process finished:', result);
 
-    return NextResponse.json({
+    const response = {
       message: 'Forced clock out process completed successfully.',
       ...result,
-    });
-  } catch (error) {
+    };
+    
+    await updateApiCallLog(logId, { status: 'success', result: response });
+    return NextResponse.json(response);
+
+  } catch (error: any) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[/api/force-clock-out] An error occurred:', error);
+    await updateApiCallLog(logId, { status: 'error', result: { message: 'An error occurred during the force clock out process.', error: errorMessage } });
     return NextResponse.json(
       { message: 'An error occurred during the force clock out process.' },
       { status: 500 }

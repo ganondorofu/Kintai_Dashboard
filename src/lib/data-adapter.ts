@@ -1,7 +1,8 @@
 
+
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch, collectionGroup } from 'firebase/firestore';
 import { db } from './firebase';
-import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache, CronSettings } from '@/types';
+import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache, CronSettings, ApiCallLog } from '@/types';
 import type { GitHubUser } from './oauth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
@@ -974,53 +975,48 @@ export const watchTokenStatus = (token: string, callback: (status: string, data?
 };
 
 export const forceClockOutAllActiveUsers = async (): Promise<{ success: number; failed: number; noAction: number }> => {
-    const allUsers = await getAllUsers();
-    let successCount = 0;
-    let noActionCount = 0;
-    let failedCount = 0;
-  
-    const now = new Date();
-    const { year, month, day } = getAttendancePath(now);
-    const dateKey = `${year}-${month}-${day}`;
-  
-    const batch = writeBatch(db);
-    
-    // 全ユーザーの最新ログを効率的に取得
-    const uids = allUsers.map(u => u.uid);
-    const latestLogsMap = await getLatestLogForEachUser(uids);
+  const allUsers = await getAllUsers();
+  let successCount = 0;
+  let noActionCount = 0;
+  let failedCount = 0;
 
-    for (const user of allUsers) {
-      try {
-        const latestLog = latestLogsMap.get(user.uid);
+  const now = new Date();
+  const { year, month, day } = getAttendancePath(now);
+  const dateKey = `${year}-${month}-${day}`;
+
+  const batch = writeBatch(db);
+  const uids = allUsers.map(u => u.uid);
+  const latestLogsMap = await getLatestLogForEachUser(uids);
+
+  for (const user of allUsers) {
+    try {
+      const latestLog = latestLogsMap.get(user.uid);
+      if (latestLog && latestLog.type === 'entry') {
+        const logId = generateAttendanceLogId(user.uid);
+        const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
         
-        if (latestLog && latestLog.type === 'entry') {
-          // このユーザーは現在出勤中
-          const logId = generateAttendanceLogId(user.uid);
-          const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
-          
-          batch.set(newLogRef, {
-            uid: user.uid,
-            type: 'exit',
-            timestamp: serverTimestamp(),
-            cardId: 'force_checkout'
-          });
-          
-          successCount++;
-        } else {
-          // 最新ログがない、または退勤済み
-          noActionCount++;
-        }
-      } catch (error) {
-        console.error(`ユーザー ${user.uid} の処理中にエラー:`, error);
-        failedCount++;
+        batch.set(newLogRef, {
+          uid: user.uid,
+          type: 'exit',
+          timestamp: serverTimestamp(),
+          cardId: 'force_checkout'
+        });
+        
+        successCount++;
+      } else {
+        noActionCount++;
       }
+    } catch (error) {
+      console.error(`ユーザー ${user.uid} の処理中にエラー:`, error);
+      failedCount++;
     }
-  
-    if (successCount > 0) {
-      await batch.commit();
-    }
-  
-    return { success: successCount, failed: failedCount, noAction: noActionCount };
+  }
+
+  if (successCount > 0) {
+    await batch.commit();
+  }
+
+  return { success: successCount, failed: failedCount, noAction: noActionCount };
 };
 
 export const getLatestLogForEachUser = async (uids: string[]): Promise<Map<string, AttendanceLog>> => {
@@ -1029,24 +1025,18 @@ export const getLatestLogForEachUser = async (uids: string[]): Promise<Map<strin
     return latestLogs;
   }
 
-  // Firestore `in` query has a limit of 30 elements. Chunk the UIDs.
   const chunkSize = 30;
   const chunks: string[][] = [];
   for (let i = 0; i < uids.length; i += chunkSize) {
     chunks.push(uids.slice(i, i + chunkSize));
   }
 
-  const chunkPromises = chunks.map(async (chunk) => {
+  const processChunk = async (chunk: string[]) => {
     const logsQuery = query(
       collectionGroup(db, 'logs'),
       where('uid', 'in', chunk)
     );
-    return getDocs(logsQuery);
-  });
-
-  const chunkSnapshots = await Promise.all(chunkPromises);
-
-  for (const snapshot of chunkSnapshots) {
+    const snapshot = await getDocs(logsQuery);
     snapshot.docs.forEach(doc => {
       const log = { id: doc.id, ...doc.data() } as AttendanceLog;
       const existing = latestLogs.get(log.uid);
@@ -1055,7 +1045,9 @@ export const getLatestLogForEachUser = async (uids: string[]): Promise<Map<strin
         latestLogs.set(log.uid, log);
       }
     });
-  }
+  };
+
+  await Promise.all(chunks.map(processChunk));
 
   return latestLogs;
 };
@@ -1087,4 +1079,34 @@ export const updateForceClockOutSettings = async (startTime: string, endTime: st
     console.error("Error updating cron settings:", error);
     throw error;
   }
+};
+
+export const createApiCallLog = async (endpoint: string, initialData: Partial<ApiCallLog>): Promise<string> => {
+  const logRef = collection(db, 'api_call_logs');
+  const docRef = await addDoc(logRef, {
+    apiEndpoint: endpoint,
+    timestamp: serverTimestamp(),
+    ...initialData,
+  });
+  return docRef.id;
+};
+
+export const updateApiCallLog = async (logId: string, resultData: Partial<ApiCallLog>): Promise<void> => {
+  const logRef = doc(db, 'api_call_logs', logId);
+  await updateDoc(logRef, {
+    ...resultData,
+    completedAt: serverTimestamp(),
+  });
+};
+
+export const getApiCallLogs = async (endpoint: string, count: number): Promise<ApiCallLog[]> => {
+  const logsRef = collection(db, 'api_call_logs');
+  const q = query(
+    logsRef,
+    where('apiEndpoint', '==', endpoint),
+    orderBy('timestamp', 'desc'),
+    limit(count)
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ApiCallLog));
 };

@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface AppUser {
@@ -89,4 +90,13 @@ export interface CronSettings {
   forceClockOutStartTime?: string; // HH:mm format
   forceClockOutEndTime?: string; // HH:mm format
   updatedAt?: Timestamp;
+}
+
+export interface ApiCallLog {
+  id?: string;
+  apiEndpoint: string;
+  timestamp: Timestamp;
+  completedAt?: Timestamp;
+  status: 'running' | 'success' | 'error' | 'skipped';
+  result?: Record<string, any>;
 }

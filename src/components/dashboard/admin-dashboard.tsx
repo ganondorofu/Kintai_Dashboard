@@ -1,12 +1,13 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { TeamManagement } from './team-management';
 import { AttendanceCalendar } from './attendance-calendar';
-import { forceClockOutAllActiveUsers, getForceClockOutSettings, updateForceClockOutSettings } from '@/lib/data-adapter';
-import type { AppUser, CronSettings } from '@/types';
+import { forceClockOutAllActiveUsers, getForceClockOutSettings, updateForceClockOutSettings, getApiCallLogs, safeTimestampToDate } from '@/lib/data-adapter';
+import type { AppUser, CronSettings, ApiCallLog } from '@/types';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,6 +15,70 @@ import { useDashboard } from '@/contexts/dashboard-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+
+function ApiCallHistory() {
+  const [logs, setLogs] = useState<ApiCallLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchLogs = async () => {
+    try {
+      const fetchedLogs = await getApiCallLogs('/api/force-clock-out', 20);
+      setLogs(fetchedLogs);
+    } catch (error) {
+      console.error("Failed to fetch API call logs:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 5 * 60 * 1000); // 5分ごとに更新
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+     <Card>
+        <CardHeader>
+          <CardTitle>強制退勤API 実行履歴</CardTitle>
+          <CardDescription>
+            cronジョブまたは手動によるAPI呼び出しの最新20件の履歴です。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="max-h-96 overflow-y-auto">
+          {loading ? (
+             <p>読み込み中...</p>
+          ) : logs.length === 0 ? (
+             <p className="text-muted-foreground">履歴はありません。</p>
+          ) : (
+            <div className="space-y-4">
+              {logs.map((log) => {
+                const timestamp = safeTimestampToDate(log.timestamp);
+                return (
+                  <div key={log.id} className="text-sm p-3 border rounded-md">
+                    <p className="font-semibold">
+                      {timestamp ? timestamp.toLocaleString('ja-JP') : '日付不明'}
+                    </p>
+                    <p className="text-muted-foreground">
+                      ステータス: <span className={`font-medium ${
+                        log.status === 'success' ? 'text-green-600' :
+                        log.status === 'error' ? 'text-red-600' :
+                        log.status === 'skipped' ? 'text-yellow-600' : ''
+                      }`}>{log.status}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {JSON.stringify(log.result)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+     </Card>
+  );
+}
+
 
 export default function AdminDashboard() {
   const { appUser } = useAuth();
@@ -129,40 +194,43 @@ export default function AdminDashboard() {
             <AttendanceCalendar currentUser={appUser} />
           )}
           {activeTab === 'settings' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>自動強制退勤設定</CardTitle>
-                <CardDescription>cron.yamlで設定されたスケジュールでAPIが呼び出された際、ここで設定した時間帯の場合のみ強制退勤が実行されます。</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="start-time">開始時刻</Label>
-                    <Input 
-                      id="start-time"
-                      type="time" 
-                      value={cronSettings.forceClockOutStartTime || "23:55"}
-                      onChange={e => setCronSettings(prev => ({...prev, forceClockOutStartTime: e.target.value}))}
-                    />
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+               <Card>
+                <CardHeader>
+                  <CardTitle>自動強制退勤設定</CardTitle>
+                  <CardDescription>cron.yamlで設定されたスケジュールでAPIが呼び出された際、ここで設定した時間帯の場合のみ強制退勤が実行されます。</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="start-time">開始時刻</Label>
+                      <Input 
+                        id="start-time"
+                        type="time" 
+                        value={cronSettings.forceClockOutStartTime || "23:55"}
+                        onChange={e => setCronSettings(prev => ({...prev, forceClockOutStartTime: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="end-time">終了時刻</Label>
+                      <Input 
+                        id="end-time"
+                        type="time" 
+                        value={cronSettings.forceClockOutEndTime || "23:59"}
+                        onChange={e => setCronSettings(prev => ({...prev, forceClockOutEndTime: e.target.value}))}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="end-time">終了時刻</Label>
-                    <Input 
-                      id="end-time"
-                      type="time" 
-                      value={cronSettings.forceClockOutEndTime || "23:59"}
-                      onChange={e => setCronSettings(prev => ({...prev, forceClockOutEndTime: e.target.value}))}
-                    />
-                  </div>
-                </div>
-                <Button onClick={handleSaveCronSettings} disabled={isSavingCron}>
-                  {isSavingCron ? "保存中..." : "設定を保存"}
-                </Button>
-                 <p className="text-xs text-muted-foreground">
-                  例えば、23:00から翌02:00のように夜間をまたいで設定することも可能です。
-                </p>
-              </CardContent>
-            </Card>
+                  <Button onClick={handleSaveCronSettings} disabled={isSavingCron}>
+                    {isSavingCron ? "保存中..." : "設定を保存"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    例えば、23:00から翌02:00のように夜間をまたいで設定することも可能です。
+                  </p>
+                </CardContent>
+              </Card>
+              <ApiCallHistory />
+            </div>
           )}
         </div>
       </div>
