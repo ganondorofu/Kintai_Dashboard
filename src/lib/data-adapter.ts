@@ -1,8 +1,8 @@
 
 
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch, collectionGroup } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp, collection, addDoc, query, where, onSnapshot, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, writeBatch, collectionGroup } from 'firebase/firestore';
 import { db } from './firebase';
-import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache, CronSettings, ApiCallLog } from '@/types';
+import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache, CronSettings, ApiCallLog, Notification } from '@/types';
 import type { GitHubUser } from './oauth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
@@ -884,7 +884,6 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
       timestamp: serverTimestamp(),
     });
 
-    // `status`フィールドの更新を確実に行う
     batch.update(userDoc.ref, {
       status: newLogType === 'entry' ? 'active' : 'inactive',
       last_activity: serverTimestamp(),
@@ -976,6 +975,9 @@ export const watchTokenStatus = (token: string, callback: (status: string, data?
 
 export const forceClockOutAllActiveUsers = async (): Promise<{ success: number; failed: number; noAction: number }> => {
   const allUsers = await getAllUsers();
+  const uids = allUsers.map(u => u.uid);
+  const latestLogsMap = await getLatestLogForEachUser(uids);
+
   let successCount = 0;
   let noActionCount = 0;
   let failedCount = 0;
@@ -985,12 +987,11 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number; 
   const dateKey = `${year}-${month}-${day}`;
 
   const batch = writeBatch(db);
-  const uids = allUsers.map(u => u.uid);
-  const latestLogsMap = await getLatestLogForEachUser(uids);
 
   for (const user of allUsers) {
     try {
       const latestLog = latestLogsMap.get(user.uid);
+      
       if (latestLog && latestLog.type === 'entry') {
         const logId = generateAttendanceLogId(user.uid);
         const newLogRef = doc(db, 'attendances', dateKey, 'logs', logId);
@@ -1025,7 +1026,7 @@ export const getLatestLogForEachUser = async (uids: string[]): Promise<Map<strin
     return latestLogs;
   }
 
-  const chunkSize = 30;
+  const chunkSize = 30; // Firestore 'in' query limit
   const chunks: string[][] = [];
   for (let i = 0; i < uids.length; i += chunkSize) {
     chunks.push(uids.slice(i, i + chunkSize));
@@ -1040,7 +1041,6 @@ export const getLatestLogForEachUser = async (uids: string[]): Promise<Map<strin
     snapshot.docs.forEach(doc => {
       const log = { id: doc.id, ...doc.data() } as AttendanceLog;
       const existing = latestLogs.get(log.uid);
-
       if (!existing || (safeTimestampToDate(log.timestamp)?.getTime() || 0) > (safeTimestampToDate(existing.timestamp)?.getTime() || 0)) {
         latestLogs.set(log.uid, log);
       }
@@ -1109,4 +1109,35 @@ export const getApiCallLogs = async (endpoint: string, count: number): Promise<A
   );
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ApiCallLog));
+};
+
+// Notifications
+export const getNotifications = async (count: number = 5): Promise<Notification[]> => {
+  const notificationsRef = collection(db, 'notifications');
+  const q = query(notificationsRef, orderBy('createdAt', 'desc'), limit(count));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+};
+
+export const createNotification = async (data: Omit<Notification, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  const notificationsRef = collection(db, 'notifications');
+  const docRef = await addDoc(notificationsRef, {
+    ...data,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return docRef.id;
+};
+
+export const updateNotification = async (id: string, data: Partial<Omit<Notification, 'id' | 'createdAt'>>): Promise<void> => {
+  const notificationRef = doc(db, 'notifications', id);
+  await updateDoc(notificationRef, {
+    ...data,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const deleteNotification = async (id: string): Promise<void> => {
+  const notificationRef = doc(db, 'notifications', id);
+  await deleteDoc(notificationRef);
 };

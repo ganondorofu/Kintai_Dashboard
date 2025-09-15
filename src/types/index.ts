@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 
 export interface AppUser {
@@ -59,6 +58,17 @@ export interface Summary {
   id?: string;
   totalDays: number;
   updatedAt: Timestamp;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  content: string;
+  level: 'info' | 'warning' | 'important';
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  authorId: string;
+  authorName: string;
 }
 
 // 月次出席統計キャッシュ
