@@ -1,21 +1,86 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AttendanceLogs } from './attendance-logs';
-import type { AppUser, Team } from '@/types';
+import type { AppUser, Team, Notification } from '@/types';
 import { UserInfoCard } from './user-info-card';
 import { useDashboard } from '@/contexts/dashboard-context';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getUserAttendanceLogsV2, getWorkdaysInRange, safeTimestampToDate } from '@/lib/data-adapter';
+import { getUserAttendanceLogsV2, getWorkdaysInRange, safeTimestampToDate, getNotifications } from '@/lib/data-adapter';
 import { format, subDays, differenceInMinutes, startOfMonth } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertCircle, Bell, Info, Megaphone } from 'lucide-react';
+import { Badge } from '../ui/badge';
+import { cn } from '@/lib/utils';
 
 interface Stats {
   attendanceRate: number;
   attendedDaysLast30Days: number;
   totalWorkdaysLast30Days: number;
   totalWorkHours: number;
+}
+
+function Notifications() {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchNotifications = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getNotifications(5);
+      setNotifications(data);
+    } catch (error) {
+      console.error("Failed to fetch notifications:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  if (loading) {
+    return <Skeleton className="h-24 w-full" />;
+  }
+
+  if (notifications.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-4">
+      {notifications.map(n => {
+        const Icon = n.level === 'important' ? Megaphone : n.level === 'warning' ? AlertCircle : Bell;
+        const cardClass = cn("border-l-4", {
+          "border-red-500 bg-red-50": n.level === 'important',
+          "border-yellow-500 bg-yellow-50": n.level === 'warning',
+          "border-blue-500 bg-blue-50": n.level === 'info',
+        });
+        const iconClass = cn({
+          "text-red-600": n.level === 'important',
+          "text-yellow-600": n.level === 'warning',
+          "text-blue-600": n.level === 'info',
+        });
+
+        return (
+          <Card key={n.id} className={cardClass}>
+            <CardHeader className="flex flex-row items-center gap-4 space-y-0 pb-2">
+              <Icon className={cn("h-6 w-6", iconClass)} />
+              <CardTitle className="text-lg">{n.title}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{n.content}</p>
+              <p className="text-xs text-muted-foreground mt-4">
+                {safeTimestampToDate(n.createdAt)?.toLocaleString('ja-JP')}
+              </p>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
 }
 
 
@@ -122,6 +187,8 @@ export default function UserDashboard({ user }: { user: AppUser }) {
 
   return (
     <div className="space-y-6">
+      <Notifications />
+
       <div className="bg-white shadow rounded-lg p-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
           個人ダッシュボード

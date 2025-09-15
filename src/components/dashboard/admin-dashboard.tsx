@@ -6,8 +6,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { TeamManagement } from './team-management';
 import { AttendanceCalendar } from './attendance-calendar';
-import { forceClockOutAllActiveUsers, getForceClockOutSettings, updateForceClockOutSettings, getApiCallLogs, safeTimestampToDate } from '@/lib/data-adapter';
-import type { AppUser, CronSettings, ApiCallLog } from '@/types';
+import { forceClockOutAllActiveUsers, getForceClockOutSettings, updateForceClockOutSettings, getApiCallLogs, safeTimestampToDate, getNotifications, createNotification, updateNotification, deleteNotification } from '@/lib/data-adapter';
+import type { AppUser, CronSettings, ApiCallLog, Notification } from '@/types';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,6 +15,11 @@ import { useDashboard } from '@/contexts/dashboard-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { PlusCircle, Edit, Trash2 } from 'lucide-react';
+import { format } from 'date-fns';
 
 function ApiCallHistory() {
   const [logs, setLogs] = useState<ApiCallLog[]>([]);
@@ -79,12 +84,189 @@ function ApiCallHistory() {
   );
 }
 
+function NotificationManager({ user }: { user: AppUser }) {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingNotification, setEditingNotification] = useState<Partial<Notification> | null>(null);
+  const { toast } = useToast();
+
+  const fetchNotifications = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getNotifications(50);
+      setNotifications(data);
+    } catch (error) {
+      console.error("Failed to fetch notifications:", error);
+      toast({ title: 'エラー', description: 'お知らせの取得に失敗しました。', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  const handleOpenDialog = (notification?: Notification) => {
+    setEditingNotification(notification || { title: '', content: '', level: 'info' });
+    setIsDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!editingNotification || !editingNotification.title || !editingNotification.content) {
+      toast({ title: '入力エラー', description: 'タイトルと内容は必須です。', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      if (editingNotification.id) {
+        // Update
+        await updateNotification(editingNotification.id, {
+          title: editingNotification.title,
+          content: editingNotification.content,
+          level: editingNotification.level,
+        });
+        toast({ title: '成功', description: 'お知らせを更新しました。' });
+      } else {
+        // Create
+        await createNotification({
+          title: editingNotification.title,
+          content: editingNotification.content,
+          level: editingNotification.level || 'info',
+          authorId: user.uid,
+          authorName: `${user.lastname} ${user.firstname}`,
+        });
+        toast({ title: '成功', description: 'お知らせを作成しました。' });
+      }
+      setIsDialogOpen(false);
+      setEditingNotification(null);
+      fetchNotifications();
+    } catch (error) {
+      console.error("Failed to save notification:", error);
+      toast({ title: 'エラー', description: 'お知らせの保存に失敗しました。', variant: 'destructive' });
+    }
+  };
+  
+  const handleDelete = async (id: string) => {
+    if (window.confirm("このお知らせを本当に削除しますか？")) {
+      try {
+        await deleteNotification(id);
+        toast({ title: '成功', description: 'お知らせを削除しました。' });
+        fetchNotifications();
+      } catch (error) {
+        console.error("Failed to delete notification:", error);
+        toast({ title: 'エラー', description: 'お知らせの削除に失敗しました。', variant: 'destructive' });
+      }
+    }
+  };
+
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle>お知らせ管理</CardTitle>
+            <CardDescription>ユーザーのダッシュボードに表示されるお知らせを管理します。</CardDescription>
+          </div>
+          <Button onClick={() => handleOpenDialog()}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            新規作成
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <p>読み込み中...</p>
+        ) : notifications.length === 0 ? (
+          <p className="text-muted-foreground">お知らせはありません。</p>
+        ) : (
+          <div className="space-y-4">
+            {notifications.map(n => (
+              <div key={n.id} className="border p-4 rounded-lg">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                       <Badge variant={n.level === 'important' ? 'destructive' : n.level === 'warning' ? 'default' : 'secondary'} className={n.level === 'warning' ? 'bg-yellow-500' : ''}>{n.level}</Badge>
+                      <h4 className="font-semibold">{n.title}</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{n.content}</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      作成者: {n.authorName} / {safeTimestampToDate(n.createdAt)?.toLocaleString('ja-JP')}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(n)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(n.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingNotification?.id ? 'お知らせを編集' : '新しいお知らせを作成'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="title">タイトル</Label>
+              <Input
+                id="title"
+                value={editingNotification?.title || ''}
+                onChange={(e) => setEditingNotification(p => p ? { ...p, title: e.target.value } : null)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="content">内容</Label>
+              <Textarea
+                id="content"
+                value={editingNotification?.content || ''}
+                onChange={(e) => setEditingNotification(p => p ? { ...p, content: e.target.value } : null)}
+                rows={5}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="level">重要度</Label>
+              <Select
+                value={editingNotification?.level || 'info'}
+                onValueChange={(value) => setEditingNotification(p => p ? { ...p, level: value as any } : null)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="info">情報</SelectItem>
+                  <SelectItem value="warning">警告</SelectItem>
+                  <SelectItem value="important">重要</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>キャンセル</Button>
+            <Button onClick={handleSave}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 
 export default function AdminDashboard() {
   const { appUser } = useAuth();
   const { refreshData } = useDashboard();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'users' | 'calendar' | 'settings'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'calendar' | 'settings' | 'notifications'>('users');
   const [isForcingCheckout, setIsForcingCheckout] = useState(false);
   const [cronSettings, setCronSettings] = useState<CronSettings>({});
   const [isSavingCron, setIsSavingCron] = useState(false);
@@ -145,6 +327,7 @@ export default function AdminDashboard() {
 
   const tabs = [
     { id: 'users' as const, label: 'ユーザー管理' },
+    { id: 'notifications' as const, label: 'お知らせ管理' },
     { id: 'calendar' as const, label: '出席カレンダー' },
     { id: 'settings' as const, label: 'システム設定' },
   ];
@@ -189,6 +372,9 @@ export default function AdminDashboard() {
         <div className="p-6">
           {activeTab === 'users' && (
             <TeamManagement currentUser={appUser} />
+          )}
+          {activeTab === 'notifications' && (
+            <NotificationManager user={appUser} />
           )}
           {activeTab === 'calendar' && (
             <AttendanceCalendar currentUser={appUser} />
