@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -102,6 +101,8 @@ export default function RegisterForm({ token, cardId, onRegistrationSuccess }: R
         teamId: values.teamId,
         grade: values.grade,
         role: 'user', // Default role
+        status: 'exit', // Initialize status
+        lastStatusChangeAt: serverTimestamp(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };

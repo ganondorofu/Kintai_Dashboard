@@ -1,4 +1,3 @@
-
 import type { Timestamp } from 'firebase/firestore';
 
 export interface AppUser {
@@ -17,8 +16,8 @@ export interface AppUser {
   lastLoginAt?: Timestamp;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
-  status?: 'active' | 'inactive';
-  last_activity?: Timestamp;
+  status?: 'entry' | 'exit';
+  lastStatusChangeAt?: Timestamp;
 }
 
 export interface Team {
