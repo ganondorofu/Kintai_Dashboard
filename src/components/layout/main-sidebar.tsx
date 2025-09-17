@@ -42,7 +42,7 @@ interface MainSidebarProps {
 
 export default function MainSidebar({ onClose }: MainSidebarProps) {
   const { appUser, signOut } = useAuth();
-  const { allTeams, allUsers, todayStats, isLoading } = useDashboard();
+  const { allTeams, allUsers, isLoading } = useDashboard();
   const pathname = usePathname();
   const router = useRouter();
   const [teams, setTeams] = useState<TeamData[]>([]);
@@ -53,20 +53,9 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
   useEffect(() => {
     if (isLoading) return;
 
-    const presentUids = new Set<string>();
-    todayStats.forEach(teamStat => {
-      teamStat.gradeStats.forEach(gradeStat => {
-        gradeStat.users.forEach(user => {
-          if (user.isPresent) {
-            presentUids.add(user.uid);
-          }
-        });
-      });
-    });
-
     const teamData = allTeams.map(team => {
       const members = allUsers.filter(u => u.teamId === team.id);
-      const presentMembersCount = members.filter(m => presentUids.has(m.uid)).length;
+      const presentMembersCount = members.filter(m => m.status === 'entry').length;
 
       return {
         teamId: team.id,
@@ -75,8 +64,8 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
           uid: m.uid,
           firstname: m.firstname,
           lastname: m.lastname,
-          github: m.github,
-          isPresent: presentUids.has(m.uid),
+          github: m.github || '',
+          isPresent: m.status === 'entry',
         })).sort((a, b) => a.lastname.localeCompare(b.lastname, 'ja')),
         presentCount: presentMembersCount,
         totalCount: members.length,
@@ -89,7 +78,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
     
     setTeams(sortedTeams);
 
-  }, [allUsers, allTeams, todayStats, isLoading]);
+  }, [allUsers, allTeams, isLoading]);
 
   const handleTeamClick = (teamId: string) => {
     if (isAdmin) {
