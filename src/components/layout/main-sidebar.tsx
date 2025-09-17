@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
-import { getLatestLogForEachUser } from '@/lib/data-adapter';
 import type { AppUser } from '@/types';
 
 
@@ -43,67 +42,54 @@ interface MainSidebarProps {
 
 export default function MainSidebar({ onClose }: MainSidebarProps) {
   const { appUser, signOut } = useAuth();
-  const { allTeams, allUsers: allUsersFromContext } = useDashboard();
+  const { allTeams, allUsers, todayStats, isLoading } = useDashboard();
   const pathname = usePathname();
   const router = useRouter();
   const [teams, setTeams] = useState<TeamData[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const isAdmin = appUser?.role === 'admin';
 
   // 班データの構築
   useEffect(() => {
-    const buildTeamData = async () => {
-      if (allUsersFromContext.length === 0 || allTeams.length === 0) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
+    if (isLoading) return;
 
-      try {
-        const allUserUids = allUsersFromContext.map(u => u.uid);
-        const latestLogsMap = await getLatestLogForEachUser(allUserUids);
-
-        const presentUids = new Set<string>();
-        latestLogsMap.forEach((log, uid) => {
-          if (log.type === 'entry') {
-            presentUids.add(uid);
+    const presentUids = new Set<string>();
+    todayStats.forEach(teamStat => {
+      teamStat.gradeStats.forEach(gradeStat => {
+        gradeStat.users.forEach(user => {
+          if (user.isPresent) {
+            presentUids.add(user.uid);
           }
         });
+      });
+    });
 
-        const teamData = allTeams.map(team => {
-          const members = allUsersFromContext.filter(u => u.teamId === team.id);
-          const presentMembersCount = members.filter(m => presentUids.has(m.uid)).length;
+    const teamData = allTeams.map(team => {
+      const members = allUsers.filter(u => u.teamId === team.id);
+      const presentMembersCount = members.filter(m => presentUids.has(m.uid)).length;
 
-          return {
-            teamId: team.id,
-            teamName: team.name,
-            members: members.map(m => ({
-              uid: m.uid,
-              firstname: m.firstname,
-              lastname: m.lastname,
-              github: m.github,
-              isPresent: presentUids.has(m.uid),
-            })).sort((a, b) => a.lastname.localeCompare(b.lastname, 'ja')),
-            presentCount: presentMembersCount,
-            totalCount: members.length,
-          };
-        });
+      return {
+        teamId: team.id,
+        teamName: team.name,
+        members: members.map(m => ({
+          uid: m.uid,
+          firstname: m.firstname,
+          lastname: m.lastname,
+          github: m.github,
+          isPresent: presentUids.has(m.uid),
+        })).sort((a, b) => a.lastname.localeCompare(b.lastname, 'ja')),
+        presentCount: presentMembersCount,
+        totalCount: members.length,
+      };
+    });
 
-        const sortedTeams = teamData
-          .filter(team => team.totalCount > 0)
-          .sort((a, b) => a.teamName.localeCompare(b.teamName, 'ja'));
-        
-        setTeams(sortedTeams);
-      } catch (error) {
-        console.error('サイドバーのチームデータ構築エラー:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const sortedTeams = teamData
+      .filter(team => team.totalCount > 0)
+      .sort((a, b) => a.teamName.localeCompare(b.teamName, 'ja'));
+    
+    setTeams(sortedTeams);
 
-    buildTeamData();
-  }, [allUsersFromContext, allTeams]);
+  }, [allUsers, allTeams, todayStats, isLoading]);
 
   const handleTeamClick = (teamId: string) => {
     if (isAdmin) {
@@ -173,7 +159,7 @@ export default function MainSidebar({ onClose }: MainSidebarProps) {
             班別出勤状況
           </h3>
           
-          {loading ? (
+          {isLoading ? (
             <div className="px-3 py-2 text-sm text-sidebar-foreground/70">読み込み中...</div>
           ) : (
             <Accordion type="single" collapsible className="w-full space-y-1">

@@ -121,21 +121,10 @@ export const getAllUsers = async (): Promise<AppUser[]> => {
   try {
     const usersRef = collectionGroup(db, 'users');
     const snapshot = await getDocs(usersRef);
-    const users = snapshot.docs.map(doc => ({
+    return snapshot.docs.map(doc => ({
       uid: doc.id,
       ...doc.data()
     } as AppUser));
-
-    // 今日の日付の最新ログを一度に取得
-    const uids = users.map(u => u.uid);
-    const latestLogs = await getLatestLogForEachUser(uids);
-
-    return users.map(user => {
-      const lastLog = latestLogs.get(user.uid);
-      const status = lastLog?.type === 'entry' ? 'active' : 'inactive';
-      return { ...user, status, last_activity: lastLog?.timestamp };
-    });
-
   } catch (error) {
     console.error('全ユーザー取得エラー:', error);
     return [];
@@ -878,10 +867,11 @@ export const handleAttendanceByCardId = async (cardId: string): Promise<{
       timestamp: serverTimestamp(),
     });
 
-    batch.update(userDoc.ref, {
-      status: newLogType === 'entry' ? 'active' : 'inactive',
-      last_activity: serverTimestamp(),
-    });
+    // `status`の更新は不要なため削除
+    // batch.update(userDoc.ref, {
+    //   status: newLogType === 'entry' ? 'active' : 'inactive',
+    //   last_activity: serverTimestamp(),
+    // });
 
     await batch.commit();
 
@@ -969,8 +959,30 @@ export const watchTokenStatus = (token: string, callback: (status: string, data?
 
 export const forceClockOutAllActiveUsers = async (): Promise<{ success: number; failed: number; noAction: number }> => {
   const allUsers = await getAllUsers();
+  
   const uids = allUsers.map(u => u.uid);
-  const latestLogsMap = await getLatestLogForEachUser(uids);
+  const chunkSize = 30;
+  const chunks = [];
+  for (let i = 0; i < uids.length; i += chunkSize) {
+    chunks.push(uids.slice(i, i + chunkSize));
+  }
+  
+  const latestLogsMap = new Map<string, AttendanceLog>();
+
+  for (const chunk of chunks) {
+    const logsQuery = query(
+      collectionGroup(db, 'logs'),
+      where('uid', 'in', chunk)
+    );
+    const snapshot = await getDocs(logsQuery);
+    snapshot.docs.forEach(doc => {
+      const log = { id: doc.id, ...doc.data() } as AttendanceLog;
+      const existing = latestLogsMap.get(log.uid);
+      if (!existing || (safeTimestampToDate(log.timestamp)?.getTime() || 0) > (safeTimestampToDate(existing.timestamp)?.getTime() || 0)) {
+        latestLogsMap.set(log.uid, log);
+      }
+    });
+  }
 
   let successCount = 0;
   let noActionCount = 0;
@@ -1013,39 +1025,6 @@ export const forceClockOutAllActiveUsers = async (): Promise<{ success: number; 
 
   return { success: successCount, failed: failedCount, noAction: noActionCount };
 };
-
-export const getLatestLogForEachUser = async (uids: string[]): Promise<Map<string, AttendanceLog>> => {
-  const latestLogs = new Map<string, AttendanceLog>();
-  if (uids.length === 0) {
-    return latestLogs;
-  }
-
-  const chunkSize = 30; // Firestore 'in' query limit
-  const chunks: string[][] = [];
-  for (let i = 0; i < uids.length; i += chunkSize) {
-    chunks.push(uids.slice(i, i + chunkSize));
-  }
-
-  const processChunk = async (chunk: string[]) => {
-    const logsQuery = query(
-      collectionGroup(db, 'logs'),
-      where('uid', 'in', chunk)
-    );
-    const snapshot = await getDocs(logsQuery);
-    snapshot.docs.forEach(doc => {
-      const log = { id: doc.id, ...doc.data() } as AttendanceLog;
-      const existing = latestLogs.get(log.uid);
-      if (!existing || (safeTimestampToDate(log.timestamp)?.getTime() || 0) > (safeTimestampToDate(existing.timestamp)?.getTime() || 0)) {
-        latestLogs.set(log.uid, log);
-      }
-    });
-  };
-
-  await Promise.all(chunks.map(processChunk));
-
-  return latestLogs;
-};
-
 
 export const getForceClockOutSettings = async (): Promise<CronSettings | null> => {
   try {
