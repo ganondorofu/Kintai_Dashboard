@@ -2,12 +2,19 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getAllUsers, getAllTeams } from '@/lib/data-adapter';
+import { getAllUsers, getAllTeams, getDailyAttendanceStatsV2 } from '@/lib/data-adapter';
 import type { AppUser, Team, CacheStatus } from '@/types';
+
+interface DailyStats {
+  teamId: string;
+  teamName?: string;
+  gradeStats: { grade: number; count: number; users: (AppUser & { isPresent: boolean })[] }[];
+}
 
 interface DashboardContextType {
   allUsers: AppUser[];
   allTeams: Team[];
+  todayStats: DailyStats[];
   isLoading: boolean;
   refreshData: () => Promise<void>;
   monthlyCache: Record<string, any>;
@@ -21,6 +28,7 @@ const DashboardContext = createContext<DashboardContextType | undefined>(undefin
 export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
+  const [todayStats, setTodayStats] = useState<DailyStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [monthlyCache, setMonthlyCache] = useState<Record<string, any>>({});
   const [cacheStatus, setCacheStatus] = useState<CacheStatus>('idle');
@@ -30,13 +38,15 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsLoading(true);
     console.log('DashboardProvider: Loading initial data...');
     try {
-      const [users, teams] = await Promise.all([
+      const [users, teams, stats] = await Promise.all([
         getAllUsers(),
-        getAllTeams()
+        getAllTeams(),
+        getDailyAttendanceStatsV2(new Date())
       ]);
       setAllUsers(users);
       setAllTeams(teams);
-      console.log(`DashboardProvider: Loaded ${users.length} users and ${teams.length} teams.`);
+      setTodayStats(stats);
+      console.log(`DashboardProvider: Loaded ${users.length} users, ${teams.length} teams, and today's stats.`);
     } catch (error) {
       console.error('DashboardProvider: Failed to load initial data:', error);
     } finally {
@@ -51,6 +61,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const value: DashboardContextType = {
     allUsers,
     allTeams,
+    todayStats,
     isLoading,
     refreshData: loadInitialData,
     monthlyCache,
