@@ -33,6 +33,7 @@ export const safeTimestampToDate = (timestamp: any): Date | null => {
     if (timestamp instanceof Timestamp) {
       return timestamp.toDate();
     }
+    // Firestore's admin SDK might return a different Timestamp object
     if (timestamp && typeof timestamp.toDate === 'function') {
       return timestamp.toDate();
     }
@@ -45,7 +46,7 @@ export const safeTimestampToDate = (timestamp: any): Date | null => {
       return isNaN(parsed.getTime()) ? null : parsed;
     }
     if (timestamp && timestamp._seconds !== undefined && timestamp._nanoseconds !== undefined) {
-      return new Timestamp(timestamp._seconds, timestamp._nanoseconds).toDate();
+      return new Date(timestamp._seconds * 1000 + (timestamp._nanoseconds || 0) / 1000000);
     }
     console.warn('無効なタイムスタンプ形式:', timestamp);
     return null;
@@ -817,28 +818,21 @@ export const generateAttendanceLogId = (uid: string): string => {
 };
 
 export const getWorkdaysInRange = async (startDate: Date, endDate: Date): Promise<Date[]> => {
-    const workdaysRef = collection(db, 'workdays');
-    const q = query(
-        workdaysRef,
-        where('date', '>=', startDate.toISOString().split('T')[0]),
-        where('date', '<=', endDate.toISOString().split('T')[0])
-    );
-    const snapshot = await getDocs(q);
-    
-    if (!snapshot.empty) {
-        return snapshot.docs.map(doc => new Date(doc.data().date));
+    try {
+      const allLogs = await getAllAttendanceLogs(startDate, endDate, 10000); 
+      const workdays = new Set<string>();
+      allLogs.forEach(log => {
+          const logDate = safeTimestampToDate(log.timestamp);
+          if (logDate && log.type === 'entry') {
+              workdays.add(logDate.toISOString().split('T')[0]);
+          }
+      });
+  
+      return Array.from(workdays).map(dateStr => new Date(dateStr));
+    } catch (error) {
+      console.error('Error fetching workdays from logs:', error);
+      return [];
     }
-    
-    const allLogs = await getAllAttendanceLogs(startDate, endDate, 5000); 
-    const workdays = new Set<string>();
-    allLogs.forEach(log => {
-        const logDate = safeTimestampToDate(log.timestamp);
-        if (logDate && log.type === 'entry') {
-            workdays.add(logDate.toISOString().split('T')[0]);
-        }
-    });
-
-    return Array.from(workdays).map(dateStr => new Date(dateStr));
 };
 
 export const handleAttendanceByCardId = async (cardId: string): Promise<{
