@@ -1,10 +1,9 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { updateUser, formatKisei, createAttendanceLogV2, getDailyAttendanceStatsV2 } from '@/lib/data-adapter';
+import { updateUser, formatKisei, createAttendanceLogV2 } from '@/lib/data-adapter';
 import type { AppUser, AttendanceLog, Team } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -128,16 +127,16 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.teamId ? getTeamName(user.teamId) : '未配属'}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        user.status === 'active' 
+                        user.status === 'entry' 
                           ? 'bg-green-100 text-green-800' 
                           : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {user.status === 'active' ? '出勤中' : '退勤済み'}
+                        {user.status === 'entry' ? '出勤中' : '退勤済み'}
                       </span>
                     </td>
                     {isAdmin && (
                       <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
-                        {user.status !== 'active' ? (
+                        {user.status !== 'entry' ? (
                           <Button size="sm" variant="outline" onClick={() => handleManualAttendance(user, 'entry')} disabled={isProcessing === user.uid}>
                             {isProcessing === user.uid ? '処理中...' : '出勤させる'}
                           </Button>
