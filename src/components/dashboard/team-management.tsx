@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { updateUser, formatKisei, createAttendanceLogV2 } from '@/lib/data-adapter';
+import { updateUser, formatKisei, createManualAttendanceLog } from '@/lib/data-adapter';
 import type { AppUser, AttendanceLog, Team } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -46,15 +47,20 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
     }
   };
 
-  const handleManualAttendance = async (user: AppUser, type: 'entry' | 'exit') => {
+  const handleManualAttendance = async (user: AppUser) => {
     setIsProcessing(user.uid);
     try {
-      await createAttendanceLogV2(user.uid, type, 'manual_admin');
-      toast({
-        title: '成功',
-        description: `${user.lastname} ${user.firstname}さんを${type === 'entry' ? '出勤' : '退勤'}させました。`,
-      });
-      await refreshData();
+      const success = await createManualAttendanceLog(user);
+      if (success) {
+        const nextAction = (user.status === 'exit' || !user.status) ? '出勤' : '退勤';
+        toast({
+          title: '成功',
+          description: `${user.lastname} ${user.firstname}さんを${nextAction}させました。`,
+        });
+        await refreshData();
+      } else {
+        throw new Error('Manual attendance failed');
+      }
     } catch (error) {
       console.error('手動勤怠記録エラー:', error);
       toast({ title: 'エラー', description: '手動での勤怠記録に失敗しました。', variant: 'destructive' });
@@ -137,11 +143,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ currentUser }) =
                     {isAdmin && (
                       <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
                         {user.status !== 'entry' ? (
-                          <Button size="sm" variant="outline" onClick={() => handleManualAttendance(user, 'entry')} disabled={isProcessing === user.uid}>
+                          <Button size="sm" variant="outline" onClick={() => handleManualAttendance(user)} disabled={isProcessing === user.uid}>
                             {isProcessing === user.uid ? '処理中...' : '出勤させる'}
                           </Button>
                         ) : (
-                          <Button size="sm" variant="destructive" onClick={() => handleManualAttendance(user, 'exit')} disabled={isProcessing === user.uid}>
+                          <Button size="sm" variant="destructive" onClick={() => handleManualAttendance(user)} disabled={isProcessing === user.uid}>
                              {isProcessing === user.uid ? '処理中...' : '退勤させる'}
                           </Button>
                         )}
