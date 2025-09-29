@@ -6,6 +6,8 @@ import type { AppUser, AttendanceLog, LinkRequest, Team, MonthlyAttendanceCache,
 import type { GitHubUser } from './oauth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
+import { convertToJapaneseGrade } from '@/lib/utils';
+
 
 const JST_TIMEZONE = 'Asia/Tokyo';
 /**
@@ -221,8 +223,7 @@ const calculateDailyAttendanceFromLogsData = async (
 
 // 期生データを学年表示用に変換する関数
 export const formatKiseiAsGrade = (kiseiNumber: number): string => {
-  const grade = convertKiseiiToGrade(kiseiNumber);
-  return `${grade}年生（${kiseiNumber}期生）`;
+  return convertToJapaneseGrade(kiseiNumber);
 };
 
 // 期生データのみを表示する関数
@@ -402,21 +403,21 @@ export const generateAttendanceLogId = (uid: string): string => {
 };
 
 export const getWorkdaysInRange = async (startDate: Date, endDate: Date): Promise<Date[]> => {
-    try {
-      const allLogs = await getAllAttendanceLogs(startDate, endDate, 10000); 
-      const workdays = new Set<string>();
-      allLogs.forEach(log => {
-          const logDate = safeTimestampToDate(log.timestamp);
-          if (logDate && log.type === 'entry') {
-              workdays.add(logDate.toISOString().split('T')[0]);
-          }
-      });
-  
-      return Array.from(workdays).map(dateStr => new Date(dateStr));
-    } catch (error) {
-      console.error('Error fetching workdays from logs:', error);
-      return [];
-    }
+  try {
+    const allLogs = await getAllAttendanceLogs(startDate, endDate, 10000); 
+    const workdays = new Set<string>();
+    allLogs.forEach(log => {
+        const logDate = safeTimestampToDate(log.timestamp);
+        if (logDate && log.type === 'entry') {
+            workdays.add(logDate.toISOString().split('T')[0]);
+        }
+    });
+
+    return Array.from(workdays).map(dateStr => new Date(dateStr));
+  } catch (error) {
+    console.error('Error fetching workdays from logs:', error);
+    return [];
+  }
 };
 
 export const handleAttendanceByCardId = async (cardId: string): Promise<{
