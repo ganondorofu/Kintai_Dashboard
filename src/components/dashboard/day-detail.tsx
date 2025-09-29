@@ -3,7 +3,7 @@
 
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { convertGradeToDisplay } from '@/lib/utils';
+import { convertToJapaneseGrade } from '@/lib/utils';
 import type { DayStats } from '@/hooks/use-attendance-data';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -54,7 +54,7 @@ export const DayDetail: React.FC<DayDetailProps> = ({
                     .filter(gradeStat => gradeStat.count > 0)
                     .map(gradeStat => (
                     <div key={gradeStat.grade} className="bg-gray-50 rounded p-3 text-center">
-                        <div className="font-medium">{convertGradeToDisplay(gradeStat.grade)}</div>
+                        <div className="font-medium">{convertToJapaneseGrade(gradeStat.grade)}</div>
                         <div className="text-2xl font-bold text-primary mt-1">
                             {gradeStat.count}人
                         </div>
